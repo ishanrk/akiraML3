@@ -6,6 +6,8 @@
 
 class variable
 {
+
+public:
 	float* data;
 	float* gradient;
 	int dim1;
@@ -13,7 +15,6 @@ class variable
 	bool rand = true;
 	std::vector<variable*> children;
 
-public:
 
 	variable(int dimension1, int dimension2 = 1, bool random = true, std::vector<variable*>currChildren = {});
 
@@ -24,5 +25,7 @@ public:
 	void print() const;
 
 	int setData(float* arr, int dimension1);
+
+	void getChildren();
 };
 

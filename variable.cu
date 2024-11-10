@@ -11,8 +11,9 @@ variable::variable(int dimension1, int dimension2, bool random, std::vector<vari
     {
         if (dim2 == 1)
         {
-            cudaMallocManaged(&data, sizeof(float) * dim1);
-            cudaMallocManaged(&gradient, sizeof(float) * dim1);
+            data = (float*)malloc(dim1 * sizeof(float));
+            gradient = (float*)malloc(dim1 * sizeof(float));
+            
             random_init(data, dim1);
             // Set all values in `gradient` to 0
             std::fill(gradient, gradient + dim1, 0.0f);
@@ -24,10 +25,7 @@ int variable::setData(float* arr, int dimension1)
 {
     if (dimension1 != dim1)
     {
-        dim1 = dimension1;
-        cudaFree(this->data);
-        cudaFree(this->gradient);
-
+        
     }
     else
     {
@@ -41,8 +39,7 @@ int variable::setData(float* arr, int dimension1)
 
 variable::~variable()
 {
-    cudaFree(data);
-    cudaFree(gradient);
+  
 }
 variable variable::operator+(const variable& other) const {
     // Check if dimensions match
@@ -57,12 +54,13 @@ variable variable::operator+(const variable& other) const {
     variable result(this->dim1, this->dim2, false, temp);
 
     // Allocate memory for `result` data and gradient on the GPU using cudaMallocManaged
-    cudaMallocManaged(&result.data, sizeof(float) * dim1);
-    cudaMallocManaged(&result.gradient, sizeof(float) * dim1);
+    result.data = (float*)malloc(dim1 * sizeof(float));
+    result.gradient = (float*)malloc(dim1 * sizeof(float));
 
     // Perform element-wise addition
-    addWithCuda(result.data, this->data, other.data, dim1);
-
+    
+    result.data = addWithCuda(result.data, this->data, other.data, dim1);
+    
     // Set `gradient` of the new variable to 0
     std::fill(result.gradient, result.gradient + dim1, 0.0f);
 
@@ -73,10 +71,19 @@ variable variable::operator+(const variable& other) const {
 
 // Display function to print data
 void variable::print() const {
+    
     std::cout << "[";
-    for (int i = 0; i < dim1; ++i) {
-        std::cout << data[i];
+    for (int i = 0; i < dim1; i++) {
+        std::cout << this->data[i];
         if (i < dim1 - 1) std::cout << ", ";
     }
     std::cout << "]" << std::endl;
+}
+
+void variable::getChildren()
+{
+    for (auto i : this->children)
+    {
+        i->print();
+    }
 }

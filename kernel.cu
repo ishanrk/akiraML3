@@ -21,22 +21,34 @@ __global__ void vectorAddUM(float* c, float* a, float* b, int dim1)
     int i = (blockDim.x * blockIdx.x) + threadIdx.x;
     if (i < dim1)
     {
-
         c[i] = a[i] + b[i];
+        printf("c[%d] = %f\n", i, c[i]);
     }
 }
 // Helper function for using CUDA to add vectors in parallel.
-int addWithCuda(float* c, float* a, float* b, int dim1)
+float* addWithCuda(float* c, float* a, float* b, int dim1)
 {
     int id = cudaGetDevice(&id);
-    int BLOCKSZ = 4;
-    int GRIDSZ = (int)ceil(dim1 / BLOCKSZ);
+    int THRDSZ= 5;
+    int BLOCKSZ = (int)ceil(dim1 / THRDSZ);
+    float* tempa; float* tempb; float* tempc;
+    cudaMalloc(&tempa, dim1 * sizeof(float));
 
-    vectorAddUM <<<GRIDSZ, BLOCKSZ >>> (c, a, b, dim1);
+    cudaMalloc(&tempb, dim1 * sizeof(float));
+
+    cudaMalloc(&tempc, dim1 * sizeof(float));
+
+    cudaMemcpy(tempa, a, dim1*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(tempb, b, dim1 * sizeof(float), cudaMemcpyHostToDevice);
+
+
+    vectorAddUM <<<BLOCKSZ, THRDSZ >>> (tempc, tempa, tempb, dim1);
+
+    cudaMemcpy(c, tempc, dim1 * sizeof(float), cudaMemcpyDeviceToHost);
 
     cudaDeviceSynchronize();
-
-    return 1;
+    
+    return c;
 
 }
 
