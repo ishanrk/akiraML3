@@ -82,6 +82,7 @@
     <CudaCompile Include="variable.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="kernel.cuh" />
     <ClInclude Include="variable.cuh" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

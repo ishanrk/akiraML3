@@ -1,7 +1,8 @@
 #pragma once
 #include<vector>
 #include<cuda_runtime.h>
-#include "kernel.cu"
+#include "kernel.cuh"
+#include<iostream>
 
 class variable
 {
