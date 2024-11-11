@@ -4,6 +4,9 @@
 #include<algorithm>
 #include<iostream>
 
+#include <device_functions.h>
+
+
 void random_init(float* data, int dim1)
 {
     std::random_device rd;  // Seed
@@ -51,4 +54,82 @@ float* addWithCuda(float* c, float* a, float* b, int dim1)
     return c;
 
 }
+
+__global__ void multiplyVectorsKernel(float* A, float* B, float* result, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < N) {
+        result[idx] = A[idx] * B[idx]; // Multiply corresponding components
+    }
+}
+__global__ void sumVectorKernel(float* result, float* sumResult, int N) {
+    __shared__ float partialSum[256]; // Shared memory for partial sums
+
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int threadID = threadIdx.x;
+
+    if (idx < N) {
+        partialSum[threadID] = result[idx]; // Load values into shared memory
+    }
+    else {
+        partialSum[threadID] = 0.0f; // Handle out-of-bound indices
+    }
+
+    __syncthreads();
+
+    // Reduction within the block to sum the values
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (threadID < stride) {
+            partialSum[threadID] += partialSum[threadID + stride];
+        }
+        __syncthreads();
+    }
+
+    // The first thread of the block writes the sum to the global result array
+    if (threadID == 0) {
+        sumResult[blockIdx.x] = partialSum[0];
+    }
+}
+
+
+float dotCUDA(float* vec1, float* vec2, int N) {
+    float* d_vec1, * d_vec2, * d_result, * d_sumResult;
+    float sum = 0.0f;
+
+    // Allocate memory on device
+    cudaMalloc(&d_vec1, N * sizeof(float));
+    cudaMalloc(&d_vec2, N * sizeof(float));
+    cudaMalloc(&d_result, N * sizeof(float));
+    int numBlocks = (N + 255) / 256;
+    cudaMalloc(&d_sumResult, numBlocks * sizeof(float));  // Partial results for block-wise sum
+
+    // Copy data to device
+    cudaMemcpy(d_vec1, vec1, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_vec2, vec2, N * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Launch kernel to multiply vectors
+    multiplyVectorsKernel << <numBlocks, 256 >> > (d_vec1, d_vec2, d_result, N);
+
+    // Launch kernel to sum the result vector
+    sumVectorKernel << <numBlocks, 256 >> > (d_result, d_sumResult, N);
+
+    // Copy partial results back to host
+    float* partialResults = new float[numBlocks];
+    cudaMemcpy(partialResults, d_sumResult, numBlocks * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Sum the partial results to get the final sum
+    for (int i = 0; i < numBlocks; ++i) {
+        sum += partialResults[i];
+    }
+
+    // Clean up
+    delete[] partialResults;
+    cudaFree(d_vec1);
+    cudaFree(d_vec2);
+    cudaFree(d_result);
+    cudaFree(d_sumResult);
+
+    return sum;
+}
+
 

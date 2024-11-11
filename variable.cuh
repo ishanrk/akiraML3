@@ -9,7 +9,8 @@ class variable
 
 public:
 	float* data;
-	float* gradient;
+	float* gradientChild1;
+	float* gradientChild2;
 	int dim1;
 	int dim2;
 	bool rand = true;
@@ -21,6 +22,8 @@ public:
 	~variable();
 
 	variable operator+(const variable& other) const;
+
+	variable dot(const variable& other) const;
 
 	void print() const;
 

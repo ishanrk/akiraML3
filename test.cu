@@ -11,7 +11,7 @@ int main()
 
 	b.setData(arr, 5);
 	a.setData(arr2, 5);
-	variable c = a + b;
+	variable c = a.dot(b);
 	c.print();
 
 
