@@ -6,6 +6,7 @@ variable::variable(int dimension1, int dimension2, bool random, std::vector<vari
     dim2 = dimension2;
     rand = random;
     children = currChildren;
+    
     if (currChildren.empty()) { children.push_back(this); }
 
     if (rand)
@@ -15,7 +16,7 @@ variable::variable(int dimension1, int dimension2, bool random, std::vector<vari
             gradientChild1 = (float*)malloc(dim1 *dim2* sizeof(float));
             random_init(data, dim1, dim2);
             // Set all values in `gradient` to 0
-            std::fill(gradientChild1, gradientChild1 + dim1, 0.0f);
+            std::fill(gradientChild1, gradientChild1 + dim1, 1.0f);
         
     }
 }
@@ -35,7 +36,7 @@ variable::~variable()
 {
   
 }
-variable variable::operator+(const variable& other) const {
+variable variable::operator+( variable& other)  {
     // Check if dimensions match
     if (this->dim1 != other.dim1 || this->dim2 != other.dim2) {
         throw std::invalid_argument("Dimensions must match for addition.");
@@ -61,7 +62,8 @@ variable variable::operator+(const variable& other) const {
     std::fill(result.gradientChild2, result.gradientChild2 + dim1, 1.0f);
 
     // Add both operands as children to the result
-
+    this->parents.push_back(&result);
+    other.parents.push_back(&result);
     return result;
 }
 
@@ -97,7 +99,7 @@ void variable::getChildren()
     }
 }
 
-variable variable::dot(const variable& other) const
+variable variable::dot( variable& other) 
 {
     if (this->dim1 != other.dim1 || this->dim2 != other.dim2) {
         throw std::invalid_argument("Dimensions must match for dot product.");
@@ -113,12 +115,12 @@ variable variable::dot(const variable& other) const
     cudaMemcpy(result.gradientChild1, other.data, dim1 * sizeof(float), cudaMemcpyHostToHost);
     cudaMemcpy(result.gradientChild2, this->data, dim1 * sizeof(float), cudaMemcpyHostToHost);
     *(result.data) = dotCUDA(this->data, other.data, dim1);
-
+    this->parents.push_back(&result);
     return result;
 
 }
 
-variable variable::matrixMulVec(const variable& other) const
+variable variable::matrixMulVec( variable& other) 
 {
     if (this->dim2 != other.dim1) {
         throw std::invalid_argument("Dimensions must match for mutliplication.");
@@ -137,7 +139,8 @@ variable variable::matrixMulVec(const variable& other) const
 
     // Fill gradientChild2 with 'this->data'
     std::memcpy(result.gradientChild2, this->data, this->dim1 * this->dim2 * sizeof(float));
-
+    this->parents.push_back(&result);
+    other.parents.push_back(&result);
     return result;
 }
 
@@ -185,4 +188,21 @@ variable variable::relu() const
 
     reluGradient(result.data, result.gradientChild1, dim1 * dim2);
     return result;
+}
+
+void variable::backward(variable*x, float* gradAccum)
+{
+    if (this == x)
+    {
+        std::fill(gradientChild1, gradientChild1 + dim1, 1.0f);
+        for (auto i : this->children)
+        {
+            i->backward(x);
+        }
+    }
+    else
+    {
+
+    }
+
 }

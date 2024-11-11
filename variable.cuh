@@ -11,25 +11,28 @@ public:
 	float* data;
 	float* gradientChild1;
 	float* gradientChild2;
+
+	float* backwardGrad;
 	int dim1;
 	int dim2;
 	bool rand = true;
 	std::vector<variable*> children;
+	std::vector<variable*> parents = {};
 
 
 	variable(int dimension1, int dimension2 = 1, bool random = true, std::vector<variable*>currChildren = {});
 
 	~variable();
 
-	variable operator+(const variable& other) const;
+	variable operator+( variable& other) ;
 
-	variable dot(const variable& other) const;
+	variable dot( variable& other) ;
 
 	void print(bool matrix = false) const;
 
 	int setData(float* arr);
 
-	variable variable::matrixMulVec(const variable& other) const;
+	variable variable::matrixMulVec( variable& other) ;
 
 	void getChildren();
 
@@ -38,6 +41,8 @@ public:
 	variable variable::sigmoid() const;
 	variable variable::softmax() const;
 	variable variable::relu() const;
+
+	void backward(variable* x, float* gradAccum);
 };
 
 
