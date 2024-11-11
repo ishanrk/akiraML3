@@ -27,12 +27,18 @@ public:
 
 	void print(bool matrix = false) const;
 
-	int setData(float* arr, int dimension1);
+	int setData(float* arr);
 
 	variable variable::matrixMulVec(const variable& other) const;
 
 	void getChildren();
 
 	void tester();
+
+	variable variable::sigmoid() const;
+	variable variable::softmax() const;
+	variable variable::relu() const;
 };
+
+
 

@@ -7,14 +7,14 @@
 #include <device_functions.h>
 
 
-void random_init(float* data, int dim1)
+void random_init(float* data, int dim1, int dim2)
 {
     std::random_device rd;  // Seed
     std::mt19937 gen(rd()); // Standard mersenne_twister_engine
     std::uniform_real_distribution<float> dis(0.0f, 1.0f);
 
     // Fill `data` with random values between 0 and 1
-    for (int i = 0; i < dim1; ++i) {
+    for (int i = 0; i < dim1*dim2; ++i) {
         data[i] = dis(gen);
     }
 }
@@ -175,3 +175,241 @@ void matrixVectorMul(float* A, float* x, float* y, int M, int N) {
 }
 
 
+__global__ void sigmoidKernel(float* input, float* output, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Ensure we do not go out of bounds
+    if (idx < N) {
+        output[idx] = 1.0f / (1.0f + expf(-input[idx]));  // Sigmoid function
+    }
+}
+void applySigmoid(float* input, float* output, int N) {
+    float* d_input, * d_output;
+    size_t size = N * sizeof(float);
+
+    // Allocate device memory
+    cudaMalloc((void**)&d_input, size);
+    cudaMalloc((void**)&d_output, size);
+
+    // Copy data from host to device
+    cudaMemcpy(d_input, input, size, cudaMemcpyHostToDevice);
+
+    // Launch the sigmoid kernel
+    int blockSize = 256; // number of threads per block
+    int numBlocks = (N + blockSize - 1) / blockSize; // number of blocks
+    sigmoidKernel << <numBlocks, blockSize >> > (d_input, d_output, N);
+
+    // Check for errors
+    cudaDeviceSynchronize();
+
+    // Copy the result back to host
+    cudaMemcpy(output, d_output, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_output);
+}
+
+void applyReLU(float* input, float* output, int N) {
+    float* d_input, * d_output;
+    size_t size = N * sizeof(float);
+
+    // Allocate device memory
+    cudaMalloc((void**)&d_input, size);
+    cudaMalloc((void**)&d_output, size);
+
+    // Copy data from host to device
+    cudaMemcpy(d_input, input, size, cudaMemcpyHostToDevice);
+
+    // Launch the ReLU kernel
+    int blockSize = 256; // number of threads per block
+    int numBlocks = (N + blockSize - 1) / blockSize; // number of blocks
+    reluKernel << <numBlocks, blockSize >> > (d_input, d_output, N);
+
+    // Check for errors
+    cudaDeviceSynchronize();
+
+    // Copy the result back to host
+    cudaMemcpy(output, d_output, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_output);
+}
+
+
+__global__ void reluKernel(float* input, float* output, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Ensure we do not go out of bounds
+    if (idx < N) {
+        output[idx] = fmaxf(0.0f, input[idx]);  // ReLU function
+    }
+}
+__global__ void softmaxKernel(float* input, float* output, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Ensure we do not go out of bounds
+    if (idx < N) {
+        float sumExp = 0.0f;
+
+        // First, compute the sum of the exponentials (this could be optimized if using shared memory)
+        for (int i = 0; i < N; i++) {
+            sumExp += expf(input[i]);
+        }
+
+        // Now compute the softmax for this index
+        output[idx] = expf(input[idx]) / sumExp;
+    }
+}
+
+void applySoftmax(float* input, float* output, int N) {
+    float* d_input, * d_output;
+    size_t size = N * sizeof(float);
+
+    // Allocate device memory
+    cudaMalloc((void**)&d_input, size);
+    cudaMalloc((void**)&d_output, size);
+
+    // Copy data from host to device
+    cudaMemcpy(d_input, input, size, cudaMemcpyHostToDevice);
+
+    // Launch the softmax kernel
+    int blockSize = 256; // number of threads per block
+    int numBlocks = (N + blockSize - 1) / blockSize; // number of blocks
+    softmaxKernel << <numBlocks, blockSize >> > (d_input, d_output, N);
+
+    // Check for errors
+    cudaDeviceSynchronize();
+
+    // Copy the result back to host
+    cudaMemcpy(output, d_output, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_output);
+}
+__global__ void sigmoidGradientKernel(const float* x, float* grad, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Make sure the thread is within the bounds of the input vector
+    if (idx < N) {
+        // Sigmoid of the input element
+        float sigmoid_val = 1.0f / (1.0f + expf(-x[idx]));
+
+        // Gradient of sigmoid: sigmoid(x) * (1 - sigmoid(x))
+        grad[idx] = sigmoid_val * (1.0f - sigmoid_val);
+    }
+}
+
+// Function to invoke the CUDA kernel
+void sigmoidGradient(const float* x, float* grad, int N) {
+    float* d_x, * d_grad;
+
+    // Allocate memory on the device
+    cudaMalloc((void**)&d_x, N * sizeof(float));
+    cudaMalloc((void**)&d_grad, N * sizeof(float));
+
+    // Copy the input data from host to device
+    cudaMemcpy(d_x, x, N * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Define grid and block size for CUDA kernel
+    int blockSize = 256;  // Number of threads per block
+    int numBlocks = (N + blockSize - 1) / blockSize;  // Number of blocks needed
+
+    // Launch the kernel
+    sigmoidGradientKernel << <numBlocks, blockSize >> > (d_x, d_grad, N);
+
+    // Copy the result back from device to host
+    cudaMemcpy(grad, d_grad, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free the allocated memory on the device
+    cudaFree(d_x);
+    cudaFree(d_grad);
+}
+
+__global__ void softmaxGradientKernel(const float* x, float* grad, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Ensure we're within bounds of the input vector
+    if (idx < N) {
+        // First, compute the softmax values for the input vector
+        float sum_exp = 0.0f;
+        for (int i = 0; i < N; ++i) {
+            sum_exp += expf(x[i]);
+        }
+
+        // Softmax values
+        float softmax_val = expf(x[idx]) / sum_exp;
+
+        // Calculate the gradient for the softmax (Jacobian elements)
+        for (int j = 0; j < N; ++j) {
+            if (idx == j) {
+                grad[idx * N + j] = softmax_val * (1.0f - softmax_val); // Diagonal (i == j)
+            }
+            else {
+                grad[idx * N + j] = -softmax_val * expf(x[j]) / sum_exp; // Off-diagonal (i != j)
+            }
+        }
+    }
+}
+
+void softmaxGradient(const float* x, float* grad, int N) {
+    float* d_x, * d_grad;
+
+    // Allocate memory on the device
+    cudaMalloc((void**)&d_x, N * sizeof(float));
+    cudaMalloc((void**)&d_grad, N * N * sizeof(float));  // N x N matrix for Jacobian
+
+    // Copy the input data from host to device
+    cudaMemcpy(d_x, x, N * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Define grid and block size for CUDA kernel
+    int blockSize = 256;  // Number of threads per block
+    int numBlocks = (N + blockSize - 1) / blockSize;  // Number of blocks needed
+
+    // Launch the kernel
+    softmaxGradientKernel << <numBlocks, blockSize >> > (d_x, d_grad, N);
+
+    // Copy the result back from device to host
+    cudaMemcpy(grad, d_grad, N * N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free the allocated memory on the device
+    cudaFree(d_x);
+    cudaFree(d_grad);
+}
+
+__global__ void reluGradientKernel(const float* x, float* grad, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Make sure the thread is within the bounds of the input vector
+    if (idx < N) {
+        // Gradient of ReLU: 1 if x > 0, 0 if x <= 0
+        grad[idx] = (x[idx] > 0.0f) ? 1.0f : 0.0f;
+    }
+}
+
+void reluGradient(const float* x, float* grad, int N) {
+    float* d_x, * d_grad;
+
+    // Allocate memory on the device
+    cudaMalloc((void**)&d_x, N * sizeof(float));
+    cudaMalloc((void**)&d_grad, N * sizeof(float));
+
+    // Copy the input data from host to device
+    cudaMemcpy(d_x, x, N * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Define grid and block size for CUDA kernel
+    int blockSize = 256;  // Number of threads per block
+    int numBlocks = (N + blockSize - 1) / blockSize;  // Number of blocks needed
+
+    // Launch the kernel
+    reluGradientKernel << <numBlocks, blockSize >> > (d_x, d_grad, N);
+
+    // Copy the result back from device to host
+    cudaMemcpy(grad, d_grad, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free the allocated memory on the device
+    cudaFree(d_x);
+    cudaFree(d_grad);
+}

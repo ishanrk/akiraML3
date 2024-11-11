@@ -10,31 +10,24 @@ variable::variable(int dimension1, int dimension2, bool random, std::vector<vari
 
     if (rand)
     {
-        if (dim2 == 1)
-        {
-            data = (float*)malloc(dim1 * sizeof(float));
-            gradientChild1 = (float*)malloc(dim1 * sizeof(float));
-            
-            random_init(data, dim1);
+        
+            data = (float*)malloc(dim1 *dim2* sizeof(float));
+            gradientChild1 = (float*)malloc(dim1 *dim2* sizeof(float));
+            random_init(data, dim1, dim2);
             // Set all values in `gradient` to 0
             std::fill(gradientChild1, gradientChild1 + dim1, 0.0f);
-        }
+        
     }
 }
 
-int variable::setData(float* arr, int dimension1)
+int variable::setData(float* arr)
 {
-    if (dimension1 != dim1)
-    {
-        
-    }
-    else
-    {
-        for (int x = 0; x < dimension1;x++)
+
+        for (int x = 0; x < this->dim1*this->dim2;x++)
         {
             this->data[x] = arr[x];
         }
-    }
+    
     return 1;
 }
 
@@ -151,26 +144,45 @@ variable variable::matrixMulVec(const variable& other) const
 
 void variable::tester()
 {
-    int M = 4; // Number of rows in A
-    int N = 3; // Number of columns in A, and size of x
+    
+}
 
-    float A[4][3] = {
-        {1, 2, 3},
-        {4, 5, 6},
-        {7, 8, 9},
-        {10, 11, 12}
-    };
 
-    float x[3] = { 1, 2, 3 }; // Vector x
-    float y[4]; // Result vector y
 
-    // Perform matrix-vector multiplication
-    matrixVectorMul(&A[0][0], x, y, M, N);
+variable variable::sigmoid() const
+{
+    std::vector<variable*> temp;
+    temp.push_back(const_cast<variable*>(this));
+    variable result(this->dim1, this->dim2, false, temp);
+    result.data = (float*)malloc(this->dim1 * this->dim2* sizeof(float));
+    result.gradientChild1 = (float*)malloc(this->dim1 *this->dim2* sizeof(float));
+    applySigmoid(this->data, result.data, dim1*dim2);
 
-    // Print the result
-    std::cout << "Result y = A * x:" << std::endl;
-    for (int i = 0; i < M; i++) {
-        std::cout << y[i] << std::endl;
-    }
+    sigmoidGradient(result.data, result.gradientChild1, dim1*dim2);
+    return result;
 
+}
+variable variable::softmax() const
+{
+    std::vector<variable*> temp;
+    temp.push_back(const_cast<variable*>(this));
+    variable result(this->dim1, this->dim2, false, temp);
+    result.data = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+    result.gradientChild1 = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+    applySoftmax(this->data, result.data, dim1* dim2);
+
+    softmaxGradient(result.data, result.gradientChild1, dim1* dim2);
+    return result;
+}
+variable variable::relu() const
+{
+    std::vector<variable*> temp;
+    temp.push_back(const_cast<variable*>(this));
+    variable result(this->dim1, this->dim2, false, temp);
+    result.data = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+    result.gradientChild1 = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+    applyReLU(this->data, result.data, dim1 * dim2);
+
+    reluGradient(result.data, result.gradientChild1, dim1 * dim2);
+    return result;
 }
