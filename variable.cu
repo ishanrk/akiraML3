@@ -73,16 +73,29 @@ variable variable::operator+(const variable& other) const {
 }
 
 // Display function to print data
-void variable::print() const {
-    
-    std::cout << "[";
-    for (int i = 0; i < dim1; i++) {
-        std::cout << this->data[i];
-        if (i < dim1 - 1) std::cout << ", ";
+void variable::print(bool matrix) const {
+    if (matrix && dim2 > 1) { // Matrix format if matrix=true
+        std::cout << "[";
+        for (int i = 0; i < dim1; i++) {
+            std::cout << "[";
+            for (int j = 0; j < dim2; j++) {
+                std::cout << this->data[i * dim2 + j];
+                if (j < dim2 - 1) std::cout << ", ";
+            }
+            std::cout << "]";
+            if (i < dim1 - 1) std::cout << ",\n ";
+        }
+        std::cout << "]" << std::endl;
     }
-    std::cout << "]" << std::endl;
+    else { // Original vector format if matrix=false or dim2 == 1
+        std::cout << "[";
+        for (int i = 0; i < dim1; i++) {
+            std::cout << this->data[i];
+            if (i < dim1 - 1) std::cout << ", ";
+        }
+        std::cout << "]" << std::endl;
+    }
 }
-
 void variable::getChildren()
 {
     for (auto i : this->children)
@@ -94,7 +107,7 @@ void variable::getChildren()
 variable variable::dot(const variable& other) const
 {
     if (this->dim1 != other.dim1 || this->dim2 != other.dim2) {
-        throw std::invalid_argument("Dimensions must match for addition.");
+        throw std::invalid_argument("Dimensions must match for dot product.");
     }
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
@@ -112,3 +125,52 @@ variable variable::dot(const variable& other) const
 
 }
 
+variable variable::matrixMulVec(const variable& other) const
+{
+    if (this->dim2 != other.dim1) {
+        throw std::invalid_argument("Dimensions must match for mutliplication.");
+    }
+    std::vector<variable*> temp;
+    temp.push_back(const_cast<variable*>(this));
+    temp.push_back(const_cast<variable*>(&other));
+    variable result(this->dim1, other.dim2, false, temp);
+    result.data = (float*)malloc(this->dim1 * other.dim2 * sizeof(float));
+    result.gradientChild1 = (float*)malloc(other.dim1 * sizeof(float));
+    result.gradientChild2 = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+
+    matrixVectorMul(this->data, other.data, result.data, this->dim1, this->dim2);
+
+    std::memcpy(result.gradientChild1, other.data, other.dim1 * sizeof(float));
+
+    // Fill gradientChild2 with 'this->data'
+    std::memcpy(result.gradientChild2, this->data, this->dim1 * this->dim2 * sizeof(float));
+
+    return result;
+}
+
+
+void variable::tester()
+{
+    int M = 4; // Number of rows in A
+    int N = 3; // Number of columns in A, and size of x
+
+    float A[4][3] = {
+        {1, 2, 3},
+        {4, 5, 6},
+        {7, 8, 9},
+        {10, 11, 12}
+    };
+
+    float x[3] = { 1, 2, 3 }; // Vector x
+    float y[4]; // Result vector y
+
+    // Perform matrix-vector multiplication
+    matrixVectorMul(&A[0][0], x, y, M, N);
+
+    // Print the result
+    std::cout << "Result y = A * x:" << std::endl;
+    for (int i = 0; i < M; i++) {
+        std::cout << y[i] << std::endl;
+    }
+
+}

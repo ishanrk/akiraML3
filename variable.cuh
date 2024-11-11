@@ -25,10 +25,14 @@ public:
 
 	variable dot(const variable& other) const;
 
-	void print() const;
+	void print(bool matrix = false) const;
 
 	int setData(float* arr, int dimension1);
 
+	variable variable::matrixMulVec(const variable& other) const;
+
 	void getChildren();
+
+	void tester();
 };
 

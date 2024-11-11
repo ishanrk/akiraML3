@@ -132,4 +132,46 @@ float dotCUDA(float* vec1, float* vec2, int N) {
     return sum;
 }
 
+__global__ void matrixVectorMulKernel(float* A, float* x, float* y, int M, int N) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Only process rows within bounds
+    if (row < M) {
+        float sum = 0.0f;
+        // Compute the dot product of row `row` of A and vector x
+        for (int col = 0; col < N; col++) {
+            sum += A[row * N + col] * x[col];
+        }
+        // Store the result in the output vector y
+        y[row] = sum;
+    }
+}
+void matrixVectorMul(float* A, float* x, float* y, int M, int N) {
+    float* d_A, * d_x, * d_y;
+
+    // Allocate memory on the device
+    cudaMalloc((void**)&d_A, M * N * sizeof(float));
+    cudaMalloc((void**)&d_x, N * sizeof(float));
+    cudaMalloc((void**)&d_y, M * sizeof(float));
+
+    // Copy data from host to device
+    cudaMemcpy(d_A, A, M * N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_x, x, N * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Define grid and block sizes
+    int blockSize = 256;
+    int numBlocks = (M + blockSize - 1) / blockSize;
+
+    // Launch the kernel
+    matrixVectorMulKernel << <numBlocks, blockSize >> > (d_A, d_x, d_y, M, N);
+
+    // Copy the result back to host
+    cudaMemcpy(y, d_y, M * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_x);
+    cudaFree(d_y);
+}
+
 
