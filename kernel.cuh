@@ -23,3 +23,5 @@ __global__ void softmaxGradientKernel(const float* x, float* grad, int N);
 void softmaxGradient(const float* x, float* grad, int N);
 void reluGradient(const float* x, float* grad, int N);
 __global__ void reluGradientKernel(const float* x, float* grad, int N);
+void rowMatrixMul(float* row, float* matrix, float* result, int n, int m);
+__global__ void rowMatrixMulKernel(float* row, float* matrix, float* result, int n, int m);

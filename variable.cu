@@ -130,15 +130,18 @@ variable variable::matrixMulVec( variable& other)
     temp.push_back(const_cast<variable*>(&other));
     variable result(this->dim1, other.dim2, false, temp);
     result.data = (float*)malloc(this->dim1 * other.dim2 * sizeof(float));
-    result.gradientChild1 = (float*)malloc(other.dim1 * sizeof(float));
-    result.gradientChild2 = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+    result.gradientChild1 = (float*)malloc(this->dim1 * this->dim2* sizeof(float));
+    result.gradientChild2 = (float*)malloc(other.dim1 * other.dim2* sizeof(float));
 
     matrixVectorMul(this->data, other.data, result.data, this->dim1, this->dim2);
 
-    std::memcpy(result.gradientChild1, other.data, other.dim1 * sizeof(float));
+    for (int i = 0; i < this->dim1; i++) {
+        std::memcpy(result.gradientChild1 + i * other.dim1, other.data, other.dim1 * sizeof(float));
+    }
 
-    // Fill gradientChild2 with 'this->data'
-    std::memcpy(result.gradientChild2, this->data, this->dim1 * this->dim2 * sizeof(float));
+    float* rowVec = new float[this->dim1];
+    std::fill(rowVec, rowVec + this->dim1, 1.0f);
+    rowMatrixMul(rowVec, this->data, gradientChild2, this->dim1, other.dim2);
     this->parents.push_back(&result);
     other.parents.push_back(&result);
     return result;
@@ -147,7 +150,24 @@ variable variable::matrixMulVec( variable& other)
 
 void variable::tester()
 {
-    
+    int n = 2; // Row vector size
+    int m = 3; // Matrix column size
+
+    // Example row and matrix
+    float row[2] = { 1.0f, 1.0f};
+    float matrix[6] = { 1.0f, 2.0f, 3.0f, 4.0f,
+                        5.0f, 6.0f};
+    float result[3]; // Result vector of size 4
+
+    // Perform row * matrix multiplication
+    rowMatrixMul(row, matrix, result, n, m);
+
+    // Print the result
+    std::cout << "Result: ";
+    for (int i = 0; i < m; i++) {
+        std::cout << result[i] << " ";
+    }
+    std::cout << std::endl;
 }
 
 
@@ -194,15 +214,21 @@ void variable::backward(variable*x, float* gradAccum)
 {
     if (this == x)
     {
-        std::fill(gradientChild1, gradientChild1 + dim1, 1.0f);
+        std::fill(backwardGrad, backwardGrad + dim1, 1.0f);
         for (auto i : this->children)
         {
-            i->backward(x);
+            i->backward(x, gradAccum);
         }
     }
     else
     {
+        if ((this->parents[0]->dim1 == 1) || (this->parents[0]->dim2 == 1))
+        {
+            if ((this->dim1 == 1) || (this->dim2 == 1))
+            {
 
+            }
+        }
     }
 
 }

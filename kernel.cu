@@ -413,3 +413,49 @@ void reluGradient(const float* x, float* grad, int N) {
     cudaFree(d_x);
     cudaFree(d_grad);
 }
+
+__global__ void rowMatrixMulKernel(float* row, float* matrix, float* result, int n, int m) {
+    int col = blockIdx.x * blockDim.x + threadIdx.x; // Column index of the result vector
+
+    // Check if the thread is within the valid range of result vector's size
+    if (col < m) {
+        float sum = 0.0f;
+
+        // Compute the dot product of row and the col-th column of matrix
+        for (int i = 0; i < n; i++) {
+            sum += row[i] * matrix[i * m + col]; // matrix[i * m + col] accesses element at row i, column col
+        }
+
+        // Store the result in the corresponding position
+        result[col] = sum;
+    }
+}
+
+#include <iostream>
+#include <cuda_runtime.h>
+
+void rowMatrixMul(float* row, float* matrix, float* result, int n, int m) {
+    float* d_row, * d_matrix, * d_result;
+
+    // Allocate memory on the device
+    cudaMalloc(&d_row, n * sizeof(float));
+    cudaMalloc(&d_matrix, n * m * sizeof(float));
+    cudaMalloc(&d_result, m * sizeof(float));
+
+    // Copy data from host to device
+    cudaMemcpy(d_row, row, n * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_matrix, matrix, n * m * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Launch the kernel
+    int blockSize = 256;  // Number of threads per block
+    int numBlocks = (m + blockSize - 1) / blockSize;  // Ensure we cover all columns
+    rowMatrixMulKernel << <numBlocks, blockSize >> > (d_row, d_matrix, d_result, n, m);
+
+    // Copy result back to host
+    cudaMemcpy(result, d_result, m * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_row);
+    cudaFree(d_matrix);
+    cudaFree(d_result);
+}
