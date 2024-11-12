@@ -1,5 +1,6 @@
 #pragma once
 #include <cuda_runtime.h>
+#include<cmath>
 #include<device_launch_parameters.h>
 // Function declaration
 void random_init(float* data, int dim1, int dim2);
@@ -25,3 +26,10 @@ void reluGradient(const float* x, float* grad, int N);
 __global__ void reluGradientKernel(const float* x, float* grad, int N);
 void rowMatrixMul(float* row, float* matrix, float* result, int n, int m);
 __global__ void rowMatrixMulKernel(float* row, float* matrix, float* result, int n, int m);
+__global__ void transposeKernel(float* input, float* output, int width, int height);
+void transposeMatrix(float* d_input, float* d_output, int width, int height);
+void transposeMatrixCPU(float* input, float* output, int rows, int cols);
+void computeRMSEDerivative(float* pred, float* actual, float* grad, int N, float RMSE);
+__global__ void rsmeDerivativeKernel(float* pred, float* actual, float* grad, int N, float RMSE);
+float computeRMSE(float* pred, float* actual, int N);
+__global__ void rsmeKernel(float* pred, float* actual, float* output, int N);

@@ -11,7 +11,10 @@ public:
 	float* data;
 	float* gradientChild1;
 	float* gradientChild2;
-
+	int gradC11;
+	int gradC12;
+	int gradC21;
+	int gradC22;
 	float* backwardGrad;
 	int dim1;
 	int dim2;
@@ -43,6 +46,8 @@ public:
 	variable variable::relu() const;
 
 	void backward(variable* x, float* gradAccum);
+
+	variable RMSELOSS(variable* output, variable* trueOutput);
 };
 
 

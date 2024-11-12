@@ -459,3 +459,119 @@ void rowMatrixMul(float* row, float* matrix, float* result, int n, int m) {
     cudaFree(d_matrix);
     cudaFree(d_result);
 }
+
+__global__ void transposeKernel(float* input, float* output, int width, int height) {
+    // Calculate row and column index in the transposed output matrix
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    // Perform transpose only if within matrix bounds
+    if (x < width && y < height) {
+        // Write transposed value from input to output
+        output[x * height + y] = input[y * width + x];
+    }
+}
+
+void transposeMatrix(float* d_input, float* d_output, int width, int height) {
+    // Define block and grid sizes
+    dim3 blockSize(16, 16);
+    dim3 gridSize((width + blockSize.x - 1) / blockSize.x,
+        (height + blockSize.y - 1) / blockSize.y);
+
+    // Launch the kernel
+    transposeKernel << <gridSize, blockSize >> > (d_input, d_output, width, height);
+    cudaDeviceSynchronize();
+}
+void transposeMatrixCPU(float* input, float* output, int rows, int cols) {
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            output[j * rows + i] = input[i * cols + j];
+        }
+    }
+}
+
+__global__ void rsmeKernel(float* pred, float* actual, float* output, int N) {
+    extern __shared__ float temp[]; // Use shared memory to hold partial sums
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int tid = threadIdx.x;
+
+    // Each thread computes squared difference for its data point, if within bounds
+    temp[tid] = (idx < N) ? (pred[idx] - actual[idx]) * (pred[idx] - actual[idx]) : 0.0f;
+
+    __syncthreads(); // Synchronize threads to prepare for reduction
+
+    // Parallel reduction to sum all squared differences within the block
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (tid < stride) {
+            temp[tid] += temp[tid + stride];
+        }
+        __syncthreads();
+    }
+
+    // First thread of each block writes result to output
+    if (tid == 0) {
+        atomicAdd(output, temp[0]); // Atomic add across blocks
+    }
+}
+
+// Host function to compute RMSE
+float computeRMSE(float* pred, float* actual, int N) {
+    float* d_pred, * d_actual, * d_output;
+    float output = 0.0f;
+    float* h_output = &output;
+
+    cudaMalloc((void**)&d_pred, N * sizeof(float));
+    cudaMalloc((void**)&d_actual, N * sizeof(float));
+    cudaMalloc((void**)&d_output, sizeof(float));
+    cudaMemcpy(d_pred, pred, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_actual, actual, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_output, h_output, sizeof(float), cudaMemcpyHostToDevice);
+
+    // Launch kernel with one block and threads, each block handling part of the array
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+    rsmeKernel << <numBlocks, blockSize, blockSize * sizeof(float) >> > (d_pred, d_actual, d_output, N);
+
+    cudaMemcpy(h_output, d_output, sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Calculate RMSE
+    output = sqrtf(output / N);
+
+    // Free memory
+    cudaFree(d_pred);
+    cudaFree(d_actual);
+    cudaFree(d_output);
+
+    return output;
+}
+
+__global__ void rsmeDerivativeKernel(float* pred, float* actual, float* grad, int N, float RMSE) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < N) {
+        grad[idx] = (pred[idx] - actual[idx]) / (N*RMSE);
+    }
+}
+
+// Host function to compute RMSE derivative
+void computeRMSEDerivative(float* pred, float* actual, float* grad, int N, float RMSE) {
+    float* d_pred, * d_actual, * d_grad;
+
+    cudaMalloc((void**)&d_pred, N * sizeof(float));
+    cudaMalloc((void**)&d_actual, N * sizeof(float));
+    cudaMalloc((void**)&d_grad, N * sizeof(float));
+    cudaMemcpy(d_pred, pred, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_actual, actual, N * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Launch kernel
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+    rsmeDerivativeKernel << <numBlocks, blockSize >> > (d_pred, d_actual, d_grad, N, RMSE);
+
+    cudaMemcpy(grad, d_grad, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free memory
+    cudaFree(d_pred);
+    cudaFree(d_actual);
+    cudaFree(d_grad);
+}
