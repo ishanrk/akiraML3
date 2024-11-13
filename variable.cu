@@ -6,16 +6,23 @@ variable::variable(int dimension1, int dimension2, bool random, std::vector<vari
     dim2 = dimension2;
     rand = random;
     children = currChildren;
+    opID = 0;
+    if ((dim1 != 1) && (dim2 != 1))
+    {
+        matrix = true;
+    }
+    else
+    {
+        matrix = false;
+    }
     data = (float*)malloc(dim1 * dim2 * sizeof(float));
     gradientChild1 = (float*)malloc(dim1 * dim2 * sizeof(float));
     if (currChildren.empty()) { children.push_back(this); }
-    gradC11 = dim1;
-    gradC12 = dim2;
+    
     std::fill(gradientChild1, gradientChild1 + dim1, 1.0f);
-
     if (rand)
     { 
-            random_init(data, dim1, dim2);
+        random_init(data, dim1, dim2);
     }
 }
 
@@ -33,13 +40,22 @@ int variable::setData(float* arr)
 
 variable::~variable()
 {
-  
+    
 }
 variable variable::operator+( variable& other)  {
     // Check if dimensions match
     if (this->dim1 != other.dim1 || this->dim2 != other.dim2) {
         throw std::invalid_argument("Dimensions must match for addition.");
     }
+    if (dim1 != 1 && dim2 != 1)
+    {
+        matrix = true;
+    }
+    else
+    {
+        matrix = false;
+    }
+    
 
     // Create a new variable to store the result with dim1 and dim2 dimensions
     std::vector<variable*> temp;
@@ -51,10 +67,7 @@ variable variable::operator+( variable& other)  {
     result.data = (float*)malloc(dim1 * sizeof(float));
     result.gradientChild1 = (float*)malloc(dim1 * sizeof(float));
     result.gradientChild2 = (float*)malloc(dim1 * sizeof(float));
-    result.gradC11 = dim1;
-    result.gradC12 = dim2;
-    result.gradC21 = dim1;
-    result.gradC22 = dim2;
+   
     // Perform element-wise addition
     
     result.data = addWithCuda(result.data, this->data, other.data, dim1);
@@ -106,14 +119,16 @@ variable variable::dot( variable& other)
     if (this->dim1 != other.dim1 || this->dim2 != other.dim2) {
         throw std::invalid_argument("Dimensions must match for dot product.");
     }
+    if (this->dim1 != 1 && this->dim2 != 1) {
+        throw std::invalid_argument("Cannot be perfromed on matrix.");
+    }
+    opID = 1;
+    matrix = false;
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
     temp.push_back(const_cast<variable*>(&other));
     variable result(1, 1, false, temp);
-    result.gradC11 = dim1;
-    result.gradC12 = dim2;
-    result.gradC21 = dim1;
-    result.gradC22 = dim2;
+    
     result.data = (float*)malloc(sizeof(float));
     result.gradientChild1 = (float*)malloc(dim1 * sizeof(float));
     result.gradientChild2 = (float*)malloc(dim1 * sizeof(float));
@@ -131,6 +146,8 @@ variable variable::matrixMulVec( variable& other)
     if (this->dim2 != other.dim1) {
         throw std::invalid_argument("Dimensions must match for mutliplication.");
     }
+    matrix = false;
+    opID = 2;
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
     temp.push_back(const_cast<variable*>(&other));
@@ -143,13 +160,11 @@ variable variable::matrixMulVec( variable& other)
 
    
     std::memcpy(result.gradientChild1, other.data, other.dim1 * sizeof(float));
-    result.gradC11 = other.dim2;
-    result.gradC12 = other.dim1;
+    
 
     // TRANSPOSE REMAINING
     transposeMatrixCPU(this->data, result.gradientChild2, dim1, dim2);
-    result.gradC21 = this->dim2;
-    result.gradC22 = this->dim1;
+
     this->parents.push_back(result);
     other.parents.push_back(result);
     return result;
@@ -158,47 +173,42 @@ variable variable::matrixMulVec( variable& other)
 
 void variable::tester()
 {
-    variable var1(3, 1, false, {}); // Creates a 3x1 variable
-    variable var2(3, 1, false, {}); // Creates a 3x1 variable
+    std::cout << "Test 1: 3x1 vector * 1x1 element\n";
+    float A1[3] = { 1, 2, 3 };  // 3x1
+    float B1[1] = { 5 };        // 1x1
+    float C1[3];              // Result should be 3x1
+    matrixMultiply(A1, B1, C1, 3, 1, 1);
+    printMatrix(C1, 3, 1);  // Expected output: [5, 10, 15]
 
-    // Allocate data for the two variables (manually filling them for simplicity)
-    float data1[] = { 1.0f, 2.0f, 3.0f }; // Set data for var1
-    float data2[] = { 4.0f, 5.0f, 6.0f }; // Set data for var2
+    // Test 2: 3x1 vector multiplied by a 1x3 vector (outer product)
+    std::cout << "Test 2: 3x1 vector * 1x3 vector\n";
+    float A2[3] = { 1, 2, 3 };      // 3x1
+    float B2[3] = { 4, 5, 6 };      // 1x3
+    float C2[9];                  // Result should be 3x3
+    matrixMultiply(A2, B2, C2, 3, 1, 3);
+    printMatrix(C2, 3, 3);  // Expected output: [4, 5, 6, 8, 10, 12, 12, 15, 18]
 
-    // Set data in each variable
-    var1.setData(data1);
-    var2.setData(data2);
-
-    // Perform element-wise multiplication
-    variable result = var1.elementWise(var2);
-
-    // Print result data
-    std::cout << "Element-wise multiplication result: ";
-    for (int i = 0; i < 3; ++i) {
-        std::cout << result.data[i] << " ";
-    }
-    std::cout << std::endl;
-
-    // Print gradients (gradients should just be copies of the other vector in this case)
-    std::cout << "Gradient w.r.t. var1 (gradientChild1): ";
-    for (int i = 0; i < 3; ++i) {
-        std::cout << result.gradientChild1[i] << " ";
-    }
-    std::cout << std::endl;
-
-    std::cout << "Gradient w.r.t. var2 (gradientChild2): ";
-    for (int i = 0; i < 3; ++i) {
-        std::cout << result.gradientChild2[i] << " ";
-    }
-    std::cout << std::endl;
-
+    // Test 3: 3x1 vector multiplied by a 1x1 element (alternative testing)
+    std::cout << "Test 3: 3x1 vector * 1x1 element (same as Test 1)\n";
+    float C3[3];              // Result should be 3x1
+    matrixMultiply(A1, B1, C3, 3, 1, 1);
+    printMatrix(C3, 3, 1);  // Expected output: [5, 10, 15]
     
 }
 
 
 
-variable variable::sigmoid() const
+variable variable::sigmoid() 
 {
+    if (dim1 != 1 && dim2 != 1)
+    {
+        matrix = true;
+    }
+    else
+    {
+        matrix = false;
+    }
+    opID = 1;
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
     variable result(this->dim1, this->dim2, false, temp);
@@ -210,8 +220,17 @@ variable variable::sigmoid() const
     return result;
 
 }
-variable variable::softmax() const
+variable variable::softmax() 
 {
+    if (dim1 != 1 && dim2 != 1)
+    {
+        matrix = true;
+    }
+    else
+    {
+        matrix = false;
+    }
+    opID = 1;
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
     variable result(this->dim1, this->dim2, false, temp);
@@ -222,8 +241,17 @@ variable variable::softmax() const
     softmaxGradient(result.data, result.gradientChild1, dim1* dim2);
     return result;
 }
-variable variable::relu() const
+variable variable::relu() 
 {
+    if (dim1 != 1 && dim2 != 1)
+    {
+        matrix = true;
+    }
+    else
+    {
+        matrix = false;
+    }
+    opID = 1;
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
     variable result(this->dim1, this->dim2, false, temp);
@@ -345,6 +373,8 @@ int variable::backward(variable * root, float* gradAccum, int childID)
 
 variable variable::elementWise(variable& other)
 {
+    matrix = false;
+    opID = 1;
     if (this->dim1 != other.dim1 || this->dim2 != other.dim2) {
         throw std::invalid_argument("Dimensions must match for dot product.");
     }
@@ -352,10 +382,7 @@ variable variable::elementWise(variable& other)
     temp.push_back(const_cast<variable*>(this));
     temp.push_back(const_cast<variable*>(&other));
     variable result(dim1, dim2, false, temp);
-    result.gradC11 = dim1;
-    result.gradC12 = dim2;
-    result.gradC21 = dim1;
-    result.gradC22 = dim2;
+
     result.data = (float*)malloc(dim1*dim2*sizeof(float));
     result.gradientChild1 = (float*)malloc(dim1*dim2 * sizeof(float));
     result.gradientChild2 = (float*)malloc(dim1 *dim2* sizeof(float));
@@ -369,13 +396,22 @@ variable variable::elementWise(variable& other)
 
 variable variable::RMSELOSS( variable &trueOutput)
 {
+    opID = 3;
+    if (dim1 != 1 && dim2 != 1)
+    {
+        matrix = true;
+    }
+    else
+    {
+        matrix = false;
+    }
+    
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
     variable result(1, 1, false, temp);
     result.data = (float*)malloc(1 * sizeof(float));
     result.gradientChild1 = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
-    result.gradC11 = dim1;
-    result.gradC12 = dim2;
+  
 
     *(result.data) = computeRMSE(this->data, trueOutput.data, dim1 * dim2);
     computeRMSEDerivative(this->data, trueOutput.data, result.gradientChild1, dim1, *(result.data));

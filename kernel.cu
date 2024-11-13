@@ -648,3 +648,56 @@ void scaleVectorHost(float* h_vector, float scalar, int size) {
     // Free device memory
     cudaFree(d_vector);
 }
+
+__global__ void matrixMultiplyKernel(float* A, float* B, float* C, int M, int N, int P) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M && col < P) {
+        float sum = 0.0f;
+        for (int i = 0; i < N; ++i) {
+            sum += A[row * N + i] * B[i * P + col];
+        }
+        C[row * P + col] = sum;
+    }
+}
+
+// Host function to perform matrix multiplication on the GPU
+void matrixMultiply(float* h_A, float* h_B, float* h_C, int M, int N, int P) {
+    float* d_A, * d_B, * d_C;
+
+    // Allocate device memory
+    cudaMalloc((void**)&d_A, M * N * sizeof(float));
+    cudaMalloc((void**)&d_B, N * P * sizeof(float));
+    cudaMalloc((void**)&d_C, M * P * sizeof(float));
+
+    // Copy matrices to the device
+    cudaMemcpy(d_A, h_A, M * N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, N * P * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Define thread block and grid dimensions
+    dim3 threadsPerBlock(16, 16);
+    dim3 blocksPerGrid((P + threadsPerBlock.x - 1) / threadsPerBlock.x,
+        (M + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    // Launch kernel
+    matrixMultiplyKernel << <blocksPerGrid, threadsPerBlock >> > (d_A, d_B, d_C, M, N, P);
+
+    // Copy the result matrix back to the host
+    cudaMemcpy(h_C, d_C, M * P * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+}
+
+// Utility function to print a matrix
+void printMatrix(float* mat, int rows, int cols) {
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            std::cout << mat[i * cols + j] << " ";
+        }
+        std::cout << std::endl;
+    }
+}

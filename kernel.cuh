@@ -48,3 +48,6 @@ void elementwiseMultiply(float* x, float* y, float* result, int N);
 std::vector<std::pair<float, float>> generateLinearData(int num_samples, float slope, float intercept, float noise_stddev);
 void scaleVectorHost(float* h_vector, float scalar, int size);
 __global__ void scaleVector(float* d_vector, float scalar, int size);
+void matrixMultiply(float* h_A, float* h_B, float* h_C, int M, int N, int P);
+__global__ void matrixMultiplyKernel(float* A, float* B, float* C, int M, int N, int P);
+void printMatrix(float* mat, int rows, int cols);
