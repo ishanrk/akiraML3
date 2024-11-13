@@ -55,7 +55,7 @@ variable variable::operator+( variable& other)  {
     {
         matrix = false;
     }
-    
+    opID = 1;
 
     // Create a new variable to store the result with dim1 and dim2 dimensions
     std::vector<variable*> temp;
@@ -161,9 +161,8 @@ variable variable::matrixMulVec( variable& other)
    
     std::memcpy(result.gradientChild1, other.data, other.dim1 * sizeof(float));
     
-
+    std::memcpy(result.gradientChild2, this->data, this->dim1 * this->dim2* sizeof(float));
     // TRANSPOSE REMAINING
-    transposeMatrixCPU(this->data, result.gradientChild2, dim1, dim2);
 
     this->parents.push_back(result);
     other.parents.push_back(result);
@@ -430,6 +429,90 @@ void variable::update(float lr)
         data[x] = data[x] - lr * this->backwardGrad[x];
     }
     parents.pop_back();
+}
+
+void variable::reverseMode(float* gradAccum, int childID)
+{
+    if (parents.empty()) // root note
+    {
+        backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+        std::fill(backwardGrad, backwardGrad + dim1, 1.0f);
+        if (opID != 0)
+        {
+            for (int x = 0; x < children.size();x++)
+            {
+                // lead node checker
+
+                children[x]->reverseMode(backwardGrad, x);
+
+            }
+        }
+    }
+    else
+    {
+        backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+        if (opID == 3)
+        {
+            matrixMultiply(parents[0].gradientChild1, gradAccum, backwardGrad, dim1, 1, 1);
+            
+                for (int x = 0; x < children.size();x++)
+                {
+                    if (children[x] != this)
+                    {
+                        children[x]->reverseMode(backwardGrad, x);
+                    }
+
+                }
+            
+        }
+        else if (opID == 2)
+        {
+            if (childID == 0)
+            {
+                if (matrix = true)
+                {
+                    matrixMultiply(gradAccum, parents[0].gradientChild1, backwardGrad, dim1, 1, dim2);
+                }
+                else
+                {
+                    matrixMultiply(gradAccum, parents[0].gradientChild1, backwardGrad, 1, dim1, dim2);
+                }
+            }
+            else
+            {
+                if (matrix = true)
+                {
+                    matrixMultiply(gradAccum, parents[0].gradientChild2, backwardGrad, dim1, 1, dim2);
+                }
+                else
+                {
+                    matrixMultiply(gradAccum, parents[0].gradientChild2, backwardGrad, 1, dim1, dim2);
+                }
+            }
+
+            
+                for (int x = 0; x < children.size();x++)
+                {
+                    if (children[x] != this)
+                    {
+                        children[x]->reverseMode(backwardGrad, x);
+                    }
+                }
+            
+        }
+        else if (opID == 1)
+        {
+            elementwiseMultiply(gradAccum, parents[0].gradientChild1, backwardGrad, dim1 * dim2);
+            for (int x = 0; x < children.size();x++)
+            {
+                if (children[x] != this)
+                {
+                    children[x]->reverseMode(backwardGrad, x);
+                }
+            }
+        }
+        
+    }
 }
 
 

@@ -52,6 +52,9 @@ public:
 
 	variable scale(float scalar);
 
+
+	void reverseMode(float* gradAccum, int childID);
+
 	void update(float lr);
 };
 

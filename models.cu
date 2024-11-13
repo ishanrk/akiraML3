@@ -26,7 +26,7 @@ std::pair<float, float> scalarLinearRegression(std::vector<std::pair<float, floa
 	variable loss(1, 1, false);
 	cout << *(theta.data) << endl;
 	cout << *(X.data) << endl;
-	for (int x = 0; x < 5000; x++)
+	for (int x = 0; x < 100; x++)
 	{
 		prod = X.elementWise(theta);
 		
@@ -34,7 +34,7 @@ std::pair<float, float> scalarLinearRegression(std::vector<std::pair<float, floa
 		loss = layer.RMSELOSS(Y);
 	
 		float *arr = { 0 };
-		loss.backward(&loss, arr, 0);
+		loss.reverseMode(arr, 0);
 		
 		float derivTheta = 0;
 		float derivBias = 0;
