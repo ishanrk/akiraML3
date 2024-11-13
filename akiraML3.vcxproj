@@ -78,12 +78,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <CudaCompile Include="kernel.cu" />
+    <CudaCompile Include="models.cu" />
     <CudaCompile Include="test.cu" />
     <CudaCompile Include="tests.cu" />
     <CudaCompile Include="variable.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="kernel.cuh" />
+    <ClInclude Include="models.cuh" />
     <ClInclude Include="variable.cuh" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

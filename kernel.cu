@@ -1,59 +1,69 @@
 ﻿#pragma once
 #include "kernel.cuh"
-#include<random>
-#include<algorithm>
-#include<iostream>
-
-#include <device_functions.h>
 
 
 void random_init(float* data, int dim1, int dim2)
 {
-    std::random_device rd;  // Seed
-    std::mt19937 gen(rd()); // Standard mersenne_twister_engine
-    std::uniform_real_distribution<float> dis(0.0f, 1.0f);
+    std::srand(static_cast<unsigned>(std::time(0)));
 
-    // Fill `data` with random values between 0 and 1
-    for (int i = 0; i < dim1*dim2; ++i) {
-        data[i] = dis(gen);
+    // Generate one random value between 0 and 1
+    float random_value = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+
+    // Set every element in `data` to this random value
+    for (int i = 0; i < dim1 * dim2; ++i) {
+        data[i] = random_value;
     }
 }
 
-__global__ void vectorAddUM(float* c, float* a, float* b, int dim1)
-{
-    int i = (blockDim.x * blockIdx.x) + threadIdx.x;
-    if (i < dim1)
-    {
+__global__ void vectorAddUM(float* c, float* a, float* b, int dim1) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < dim1) {
         c[i] = a[i] + b[i];
-        
     }
 }
-// Helper function for using CUDA to add vectors in parallel.
-float* addWithCuda(float* c, float* a, float* b, int dim1)
-{
-    int id = cudaGetDevice(&id);
-    int THRDSZ= 5;
-    int BLOCKSZ = (int)ceil((double)dim1 / (double)THRDSZ);
-    float* tempa; float* tempb; float* tempc;
-    cudaMalloc(&tempa, dim1 * sizeof(float));
 
-    cudaMalloc(&tempb, dim1 * sizeof(float));
+float* addWithCuda(float* c,  float* a,  float* b, int dim1) {
+    const int THRDSZ = 32;
+    const int BLOCKSZ = (dim1 + THRDSZ - 1) / THRDSZ; // Calculate blocks to cover `dim1`
 
-    cudaMalloc(&tempc, dim1 * sizeof(float));
+    // Allocate device memory
+    float* tempa, * tempb, * tempc;
+    cudaError_t err;
 
-    cudaMemcpy(tempa, a, dim1*sizeof(float), cudaMemcpyHostToDevice);
+    err = cudaMalloc((void**)&tempa, dim1 * sizeof(float));
+    if (err != cudaSuccess) { std::cerr << "Error allocating memory for tempa: " << cudaGetErrorString(err) << std::endl; return nullptr; }
+
+    err = cudaMalloc((void**)&tempb, dim1 * sizeof(float));
+    if (err != cudaSuccess) { std::cerr << "Error allocating memory for tempb: " << cudaGetErrorString(err) << std::endl; cudaFree(tempa); return nullptr; }
+
+    err = cudaMalloc((void**)&tempc, dim1 * sizeof(float));
+    if (err != cudaSuccess) { std::cerr << "Error allocating memory for tempc: " << cudaGetErrorString(err) << std::endl; cudaFree(tempa); cudaFree(tempb); return nullptr; }
+
+    // Copy input vectors from host to device
+    cudaMemcpy(tempa, a, dim1 * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(tempb, b, dim1 * sizeof(float), cudaMemcpyHostToDevice);
 
+    // Launch kernel
+    vectorAddUM << <BLOCKSZ, THRDSZ >> > (tempc, tempa, tempb, dim1);
 
-    vectorAddUM <<<BLOCKSZ, THRDSZ >>> (tempc, tempa, tempb, dim1);
+    // Synchronize and check for errors
+    cudaDeviceSynchronize();
+    err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        std::cerr << "Kernel launch failed: " << cudaGetErrorString(err) << std::endl;
+    }
 
+    // Copy the result back to host
     cudaMemcpy(c, tempc, dim1 * sizeof(float), cudaMemcpyDeviceToHost);
 
-    cudaDeviceSynchronize();
-    
-    return c;
+    // Free device memory
+    cudaFree(tempa);
+    cudaFree(tempb);
+    cudaFree(tempc);
 
+    return c;
 }
+
 
 __global__ void multiplyVectorsKernel(float* A, float* B, float* result, int N) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -602,4 +612,23 @@ void elementwiseMultiply(float* x, float* y, float* result, int N) {
     cudaFree(d_x);
     cudaFree(d_y);
     cudaFree(d_result);
+}
+
+std::vector<std::pair<float, float>> generateLinearData(int num_samples, float slope, float intercept, float noise_stddev) {
+    std::vector<std::pair<float, float>> data;
+    data.reserve(num_samples);
+
+    std::random_device rd;
+    std::mt19937 gen(rd()); // Mersenne Twister RNG
+    std::uniform_real_distribution<> x_dist(0.0, 10.0); // Generate x values between 0 and 10
+    std::normal_distribution<> noise_dist(0.0, noise_stddev); // Gaussian noise
+
+    for (int i = 0; i < num_samples; ++i) {
+        float x = x_dist(gen);
+        float noise = noise_dist(gen);
+        float y = slope * x + intercept + noise; // Linear function with noise
+        data.emplace_back(x, y);
+    }
+
+    return data;
 }

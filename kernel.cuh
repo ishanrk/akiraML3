@@ -3,6 +3,14 @@
 #include<cmath>
 #include<device_launch_parameters.h>
 #include<iostream>
+#include<vector>
+#include "kernel.cuh"
+#include<random>
+#include<algorithm>
+#include <cmath>
+#include <utility>
+#include <random>
+#include <device_functions.h>
 // Function declaration
 void random_init(float* data, int dim1, int dim2);
 __global__ void vectorAddUM(float* c, float* a, float* b, int dim1);
@@ -36,3 +44,4 @@ float computeRMSE(float* pred, float* actual, int N);
 __global__ void rsmeKernel(float* pred, float* actual, float* output, int N);
 __global__ void elementwiseMultiplyKernel(float* x, float* y, float* result, int N);
 void elementwiseMultiply(float* x, float* y, float* result, int N);	
+std::vector<std::pair<float, float>> generateLinearData(int num_samples, float slope, float intercept, float noise_stddev);

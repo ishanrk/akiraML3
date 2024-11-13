@@ -237,25 +237,29 @@ variable variable::relu() const
 
 int variable::backward(variable * root, float* gradAccum, int childID)
 {
-   
+    
     if (this == root)
     {
+    
         backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
         std::fill(backwardGrad, backwardGrad + dim1, 1.0f);
-      
+       
         for (int x = 0; x<children.size();x++)
         {
+ 
             children[x]->backward(root,backwardGrad,x);
+       
         }
     }
     else
     {
-      
+    
         backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
-        
+   
         if ((this->parents[0].dim1 == 1) && (this->parents[0].dim2 == 1))
         {
             // this indicates dot product 
+           
        
             
             if ((this->dim1 == 1) && (this->dim2 == 1))
@@ -284,6 +288,22 @@ int variable::backward(variable * root, float* gradAccum, int childID)
                     
                 }
             }
+            else
+            {
+               
+                backwardGrad = parents[0].gradientChild1;
+                
+                for (int x = 0;x < children.size();x++)
+                {
+
+                    if (children[x] != this)
+                    {
+
+                        children[x]->backward(root, backwardGrad, x);
+                    }
+
+                }
+            }
 
 
         }
@@ -291,13 +311,18 @@ int variable::backward(variable * root, float* gradAccum, int childID)
         {
             if ((this->dim1 == 1) || (this->dim2 == 1))
             {
+               
                 if (childID== 0)
                 {
-                    elementwiseMultiply(gradAccum, parents[childID].gradientChild1, backwardGrad, dim1 * dim2);
+                    
+                    elementwiseMultiply(gradAccum, parents[0].gradientChild1, backwardGrad, dim1 * dim2);
+                    
                 }
                 else
                 {
-                    elementwiseMultiply(gradAccum, parents[childID].gradientChild1, backwardGrad, dim1 * dim2);
+                    
+                    elementwiseMultiply(gradAccum, parents[0].gradientChild2, backwardGrad, dim1 * dim2);
+                    
                 }
                 
                 for (int x = 0; x<children.size(); x++)
@@ -305,7 +330,9 @@ int variable::backward(variable * root, float* gradAccum, int childID)
                    
                     if (children[x] != this)
                     {
+                       
                         children[x]->backward(root, backwardGrad, x);
+                     
                     }
                 }
             }
@@ -336,6 +363,7 @@ variable variable::elementWise(variable& other)
     cudaMemcpy(result.gradientChild2, this->data, dim1 * sizeof(float), cudaMemcpyHostToHost);
     elementwiseMultiply(this->data, other.data, result.data, dim1 * dim2);
     this->parents.push_back(result);
+    other.parents.push_back(result);
     return result;
 }
 
@@ -343,7 +371,7 @@ variable variable::RMSELOSS( variable &trueOutput)
 {
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
-    variable result(this->dim1, this->dim2, false, temp);
+    variable result(1, 1, false, temp);
     result.data = (float*)malloc(1 * sizeof(float));
     result.gradientChild1 = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
     result.gradC11 = dim1;
@@ -362,7 +390,9 @@ void variable::update(float lr)
 {
     for (int x = 0; x < dim1 * dim2;x++)
     {
-        data[x] = data[x] - lr * backwardGrad[x];
+        std::cout << x << std::endl;
+        data[x] = data[x] - lr * this->backwardGrad[x];
     }
+    parents.pop_back();
 }
 

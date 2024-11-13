@@ -1,41 +1,19 @@
 #include <iostream>
-#include "variable.cuh"
+#include "models.cuh"
+
 using namespace std;
 
 int main()
 {
-    variable w(1, 1, false);
-    w.data[0] = 4;
-    
-    variable x(1, 1, false);
-    x.data[0] = 3;
+    int num_samples = 10;
+    float slope = 2.5;      // Specify slope (m)
+    float intercept = 1.0;  // Specify intercept (c)
+    float noise_stddev = 0.00001; // Standard deviation of noise
 
-    variable b(1, 1, false);
-    b.data[0] = 5;
+    // Generate the dataset
+    std::vector<std::pair<float, float>> dataset = generateLinearData(num_samples, slope, intercept, noise_stddev);
 
-    variable intermed = w.dot(x);
-    variable layer = intermed + b;
-    variable trueOuput(1, 1, false);
-    trueOuput.data[0] = 20;
-    variable loss = layer.RMSELOSS(trueOuput);
-    float* rand = { 0 };
-    loss.backward(&loss, rand,0);
-
-    cout << *(loss.data) << endl;
-    cout << *(layer.data) << endl;
-    cout << *(intermed.data) << endl;
-    cout << *(w.data) << endl;
-    cout << *(b.data) << endl;
-
-    cout << *(loss.backwardGrad) << endl;
-    cout << *(layer.backwardGrad) << endl;
-    cout << *(intermed.backwardGrad) << endl;
-    cout << *(w.backwardGrad) << endl;
-    cout << *(b.backwardGrad) << endl;
-
-    variable weights[] = { w };
-    w.update(0.1);
-    cout << *(w.data) << endl;
-
+    pair<float, float> answer = scalarLinearRegression(dataset, 0.01);
+    cout << answer.first << " " <<answer.second << std::endl;
 	return 0;
 }
