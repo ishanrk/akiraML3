@@ -25,7 +25,7 @@ __global__ void vectorAddUM(float* c, float* a, float* b, int dim1)
     if (i < dim1)
     {
         c[i] = a[i] + b[i];
-        printf("c[%d] = %f\n", i, c[i]);
+        
     }
 }
 // Helper function for using CUDA to add vectors in parallel.
@@ -33,7 +33,7 @@ float* addWithCuda(float* c, float* a, float* b, int dim1)
 {
     int id = cudaGetDevice(&id);
     int THRDSZ= 5;
-    int BLOCKSZ = (int)ceil(dim1 / THRDSZ);
+    int BLOCKSZ = (int)ceil((double)dim1 / (double)THRDSZ);
     float* tempa; float* tempb; float* tempc;
     cudaMalloc(&tempa, dim1 * sizeof(float));
 
@@ -535,6 +535,7 @@ float computeRMSE(float* pred, float* actual, int N) {
     cudaMemcpy(h_output, d_output, sizeof(float), cudaMemcpyDeviceToHost);
 
     // Calculate RMSE
+
     output = sqrtf(output / N);
 
     // Free memory
@@ -574,4 +575,31 @@ void computeRMSEDerivative(float* pred, float* actual, float* grad, int N, float
     cudaFree(d_pred);
     cudaFree(d_actual);
     cudaFree(d_grad);
+}
+__global__ void elementwiseMultiplyKernel(float* x, float* y, float* result, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        result[idx] = x[idx] * y[idx];
+    }
+}
+
+void elementwiseMultiply(float* x, float* y, float* result, int N) {
+    float* d_x, * d_y, * d_result;
+
+    cudaMalloc((void**)&d_x, N * sizeof(float));
+    cudaMalloc((void**)&d_y, N * sizeof(float));
+    cudaMalloc((void**)&d_result, N * sizeof(float));
+
+    cudaMemcpy(d_x, x, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_y, y, N * sizeof(float), cudaMemcpyHostToDevice);
+
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+    elementwiseMultiplyKernel << <numBlocks, blockSize >> > (d_x, d_y, d_result, N);
+
+    cudaMemcpy(result, d_result, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_x);
+    cudaFree(d_y);
+    cudaFree(d_result);
 }

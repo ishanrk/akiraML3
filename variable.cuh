@@ -20,7 +20,7 @@ public:
 	int dim2;
 	bool rand = true;
 	std::vector<variable*> children;
-	std::vector<variable*> parents = {};
+	std::vector<variable> parents = {};
 
 
 	variable(int dimension1, int dimension2 = 1, bool random = true, std::vector<variable*>currChildren = {});
@@ -35,7 +35,7 @@ public:
 
 	int setData(float* arr);
 
-	variable variable::matrixMulVec( variable& other) ;
+	variable matrixMulVec( variable& other) ;
 
 	void getChildren();
 
@@ -45,9 +45,13 @@ public:
 	variable variable::softmax() const;
 	variable variable::relu() const;
 
-	void backward(variable* x, float* gradAccum);
+	int backward(variable* root,float* gradAccum, int childID);
 
-	variable RMSELOSS(variable* output, variable* trueOutput);
+	variable RMSELOSS(variable& trueOutput);
+
+	variable elementWise(variable& other);
+
+	void update(float lr);
 };
 
 

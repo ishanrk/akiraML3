@@ -14,14 +14,8 @@ variable::variable(int dimension1, int dimension2, bool random, std::vector<vari
     std::fill(gradientChild1, gradientChild1 + dim1, 1.0f);
 
     if (rand)
-    {
-        
-            
-           
+    { 
             random_init(data, dim1, dim2);
-            // Set all values in `gradient` to 0
-           
-        
     }
 }
 
@@ -30,7 +24,7 @@ int variable::setData(float* arr)
 
         for (int x = 0; x < this->dim1*this->dim2;x++)
         {
-            std::cout << arr[x] << std::endl;
+           
             this->data[x] = arr[x];
         }
     
@@ -64,14 +58,14 @@ variable variable::operator+( variable& other)  {
     // Perform element-wise addition
     
     result.data = addWithCuda(result.data, this->data, other.data, dim1);
-    
+  
     // Set `gradient` of the new variable to 0
     std::fill(result.gradientChild1, result.gradientChild1 + dim1, 1.0f);
     std::fill(result.gradientChild2, result.gradientChild2 + dim1, 1.0f);
 
     // Add both operands as children to the result
-    this->parents.push_back(&result);
-    other.parents.push_back(&result);
+    this->parents.push_back(result);
+    other.parents.push_back(result);
     return result;
 }
 
@@ -126,7 +120,8 @@ variable variable::dot( variable& other)
     cudaMemcpy(result.gradientChild1, other.data, dim1 * sizeof(float), cudaMemcpyHostToHost);
     cudaMemcpy(result.gradientChild2, this->data, dim1 * sizeof(float), cudaMemcpyHostToHost);
     *(result.data) = dotCUDA(this->data, other.data, dim1);
-    this->parents.push_back(&result);
+    this->parents.push_back(result);
+    other.parents.push_back(result);
     return result;
 
 }
@@ -155,47 +150,47 @@ variable variable::matrixMulVec( variable& other)
     transposeMatrixCPU(this->data, result.gradientChild2, dim1, dim2);
     result.gradC21 = this->dim2;
     result.gradC22 = this->dim1;
-    this->parents.push_back(&result);
-    other.parents.push_back(&result);
+    this->parents.push_back(result);
+    other.parents.push_back(result);
     return result;
 }
 
 
 void variable::tester()
 {
-    int dim1 = 3; // Number of rows
-    int dim2 = 1; // Number of columns (vector)
+    variable var1(3, 1, false, {}); // Creates a 3x1 variable
+    variable var2(3, 1, false, {}); // Creates a 3x1 variable
 
-    // True output vector
-    float trueOutputData[3] = { 1.0f, 2.0f, 3.0f };
+    // Allocate data for the two variables (manually filling them for simplicity)
+    float data1[] = { 1.0f, 2.0f, 3.0f }; // Set data for var1
+    float data2[] = { 4.0f, 5.0f, 6.0f }; // Set data for var2
 
-    // Predicted output vector
-    float predOutputData[3] = { 1.5f, 2.5f, 3.5f };
+    // Set data in each variable
+    var1.setData(data1);
+    var2.setData(data2);
 
-    // Create variable objects for true and predicted outputs
-    variable trueOutput(dim1, dim2, false, {});
-    variable predOutput(dim1, dim2, false, {});
+    // Perform element-wise multiplication
+    variable result = var1.elementWise(var2);
 
-    // Set the data for true and predicted outputs
-    trueOutput.setData(trueOutputData);
-    predOutput.setData(predOutputData);
-
-    // Calculate RMSE loss
-    variable rmseResult = predOutput.RMSELOSS(&predOutput, &trueOutput);
-
-    // Output RMSE value (result.data holds the RMSE)
-    std::cout << "RMSE Loss: " << *(rmseResult.data) << std::endl;
-
-    // Output RMSE gradient (result.gradientChild1 holds the gradient for predOutput)
-    std::cout << "RMSE Gradient: ";
-    for (int i = 0; i < dim1; i++) {
-        std::cout << rmseResult.gradientChild1[i] << " ";
+    // Print result data
+    std::cout << "Element-wise multiplication result: ";
+    for (int i = 0; i < 3; ++i) {
+        std::cout << result.data[i] << " ";
     }
     std::cout << std::endl;
 
-    // Free allocated memory
-    free(rmseResult.data);
-    free(rmseResult.gradientChild1);
+    // Print gradients (gradients should just be copies of the other vector in this case)
+    std::cout << "Gradient w.r.t. var1 (gradientChild1): ";
+    for (int i = 0; i < 3; ++i) {
+        std::cout << result.gradientChild1[i] << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "Gradient w.r.t. var2 (gradientChild2): ";
+    for (int i = 0; i < 3; ++i) {
+        std::cout << result.gradientChild2[i] << " ";
+    }
+    std::cout << std::endl;
 
     
 }
@@ -240,30 +235,111 @@ variable variable::relu() const
     return result;
 }
 
-void variable::backward(variable*x, float* gradAccum)
+int variable::backward(variable * root, float* gradAccum, int childID)
 {
-    if (this == x)
+   
+    if (this == root)
     {
+        backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
         std::fill(backwardGrad, backwardGrad + dim1, 1.0f);
-        for (auto i : this->children)
+      
+        for (int x = 0; x<children.size();x++)
         {
-            i->backward(x, gradAccum);
+            children[x]->backward(root,backwardGrad,x);
         }
     }
     else
     {
-        if ((this->parents[0]->dim1 == 1) || (this->parents[0]->dim2 == 1))
+      
+        backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+        
+        if ((this->parents[0].dim1 == 1) && (this->parents[0].dim2 == 1))
+        {
+            // this indicates dot product 
+       
+            
+            if ((this->dim1 == 1) && (this->dim2 == 1))
+            {
+             
+                if (childID == 0)
+                {
+                    *(backwardGrad) = dotCUDA(gradAccum, parents[0].gradientChild1, dim1 * dim2);
+                    
+                }
+                else
+                {
+                    *(backwardGrad) = dotCUDA(gradAccum, parents[0].gradientChild2, dim1 * dim2);
+                   
+                }
+                
+                
+                for (int x = 0;x < children.size();x++)
+                {
+                    
+                    if (children[x] != this)
+                    {
+                        
+                        children[x]->backward(root, backwardGrad, x);
+                    }
+                    
+                }
+            }
+
+
+        }
+        else if ((this->parents[0],dim1 == 1) || (this->parents[0].dim2 == 1))
         {
             if ((this->dim1 == 1) || (this->dim2 == 1))
             {
-
+                if (childID== 0)
+                {
+                    elementwiseMultiply(gradAccum, parents[childID].gradientChild1, backwardGrad, dim1 * dim2);
+                }
+                else
+                {
+                    elementwiseMultiply(gradAccum, parents[childID].gradientChild1, backwardGrad, dim1 * dim2);
+                }
+                
+                for (int x = 0; x<children.size(); x++)
+                {
+                   
+                    if (children[x] != this)
+                    {
+                        children[x]->backward(root, backwardGrad, x);
+                    }
+                }
             }
         }
+        
     }
+    return 1;
 
 }
 
-variable variable::RMSELOSS(variable* output, variable* trueOutput)
+variable variable::elementWise(variable& other)
+{
+    if (this->dim1 != other.dim1 || this->dim2 != other.dim2) {
+        throw std::invalid_argument("Dimensions must match for dot product.");
+    }
+    std::vector<variable*> temp;
+    temp.push_back(const_cast<variable*>(this));
+    temp.push_back(const_cast<variable*>(&other));
+    variable result(dim1, dim2, false, temp);
+    result.gradC11 = dim1;
+    result.gradC12 = dim2;
+    result.gradC21 = dim1;
+    result.gradC22 = dim2;
+    result.data = (float*)malloc(dim1*dim2*sizeof(float));
+    result.gradientChild1 = (float*)malloc(dim1*dim2 * sizeof(float));
+    result.gradientChild2 = (float*)malloc(dim1 *dim2* sizeof(float));
+    cudaMemcpy(result.gradientChild1, other.data, dim1 * sizeof(float), cudaMemcpyHostToHost);
+    cudaMemcpy(result.gradientChild2, this->data, dim1 * sizeof(float), cudaMemcpyHostToHost);
+    elementwiseMultiply(this->data, other.data, result.data, dim1 * dim2);
+    this->parents.push_back(result);
+    return result;
+}
+
+variable variable::RMSELOSS( variable &trueOutput)
 {
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
@@ -273,11 +349,20 @@ variable variable::RMSELOSS(variable* output, variable* trueOutput)
     result.gradC11 = dim1;
     result.gradC12 = dim2;
 
-    *(result.data) = computeRMSE(output->data, trueOutput->data, dim1 * dim2);
-    computeRMSEDerivative(output->data, trueOutput->data, result.gradientChild1, dim1, *(result.data));
-
+    *(result.data) = computeRMSE(this->data, trueOutput.data, dim1 * dim2);
+    computeRMSEDerivative(this->data, trueOutput.data, result.gradientChild1, dim1, *(result.data));
+    
+    this->parents.push_back(result);
     return result;
 
 
+}
+
+void variable::update(float lr)
+{
+    for (int x = 0; x < dim1 * dim2;x++)
+    {
+        data[x] = data[x] - lr * backwardGrad[x];
+    }
 }
 

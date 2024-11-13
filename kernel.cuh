@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include<cmath>
 #include<device_launch_parameters.h>
+#include<iostream>
 // Function declaration
 void random_init(float* data, int dim1, int dim2);
 __global__ void vectorAddUM(float* c, float* a, float* b, int dim1);
@@ -33,3 +34,5 @@ void computeRMSEDerivative(float* pred, float* actual, float* grad, int N, float
 __global__ void rsmeDerivativeKernel(float* pred, float* actual, float* grad, int N, float RMSE);
 float computeRMSE(float* pred, float* actual, int N);
 __global__ void rsmeKernel(float* pred, float* actual, float* output, int N);
+__global__ void elementwiseMultiplyKernel(float* x, float* y, float* result, int N);
+void elementwiseMultiply(float* x, float* y, float* result, int N);	
