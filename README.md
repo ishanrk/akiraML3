@@ -95,9 +95,10 @@ Represents a tensor with dimensions (dim1, dim2) and supports operations like:
 - Addition: operator+
 - Matrix-Vector Multiplication: matrixMulVec
 - Activation Functions: relu, sigmoid, softmax
-- Backpropagation: backward
+- Backpropagation: backward through constructed computational graph
 - RMSE Loss: RMSELOSS
 - Scaling: scale
+  
 ### CUDA Kernels (kernel.cuh)
 - Defines GPU kernels for various operations:
 - vectorAddUM: Performs element-wise addition.
@@ -124,6 +125,7 @@ __global__ void matrixVectorMulKernel(float* A, float* x, float* y, int M, int N
 ## Future Improvements
 This library is currently a work in progress. Some potential future improvements:
 
+- Define thresholds for GPU operations to switch over from CPU operations (1024 element size)
 - Implement additional machine learning models (e.g., logistic regression, neural networks).
 - Add support for more advanced optimizers (e.g., Adam, RMSprop).
 - Include more sophisticated backpropagation mechanisms for deeper models.
