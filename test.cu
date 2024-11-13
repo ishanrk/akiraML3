@@ -1,19 +1,19 @@
 #include <iostream>
-#include "variable.cuh"
+#include "models.cuh"
+
 using namespace std;
 
 int main()
 {
-	variable a(5);
-	variable b(5);
-	float arr[5] = { 1,2,3,4,5 };
-	float arr2[5] = { 1,2,3,4,5 };
+    int num_samples = 10;
+    float slope = 10000;      // Specify slope (m)
+    float intercept = -988;  // Specify intercept (c)
+    float noise_stddev = 0.00001; // Standard deviation of noise
 
-	b.setData(arr, 5);
-	a.setData(arr2, 5);
-	variable c = a + b;
-	c.print();
+    // Generate the dataset
+    std::vector<std::pair<float, float>> dataset = generateLinearData(num_samples, slope, intercept, noise_stddev);
 
-
+    pair<float, float> answer = scalarLinearRegression(dataset, 0.001);
+    cout << answer.first << " " <<answer.second << std::endl;
 	return 0;
 }
