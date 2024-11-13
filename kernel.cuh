@@ -11,6 +11,7 @@
 #include <utility>
 #include <random>
 #include <device_functions.h>
+#include "cublas.h"
 // Function declaration
 void random_init(float* data, int dim1, int dim2);
 __global__ void vectorAddUM(float* c, float* a, float* b, int dim1);
@@ -45,3 +46,5 @@ __global__ void rsmeKernel(float* pred, float* actual, float* output, int N);
 __global__ void elementwiseMultiplyKernel(float* x, float* y, float* result, int N);
 void elementwiseMultiply(float* x, float* y, float* result, int N);	
 std::vector<std::pair<float, float>> generateLinearData(int num_samples, float slope, float intercept, float noise_stddev);
+void scaleVectorHost(float* h_vector, float scalar, int size);
+__global__ void scaleVector(float* d_vector, float scalar, int size);

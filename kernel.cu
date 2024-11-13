@@ -6,10 +6,10 @@ void random_init(float* data, int dim1, int dim2)
 {
     std::srand(static_cast<unsigned>(std::time(0)));
 
-    // Generate one random value between 0 and 1
+    
     float random_value = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
 
-    // Set every element in `data` to this random value
+    // Set every element in data to this random value
     for (int i = 0; i < dim1 * dim2; ++i) {
         data[i] = random_value;
     }
@@ -24,9 +24,9 @@ __global__ void vectorAddUM(float* c, float* a, float* b, int dim1) {
 
 float* addWithCuda(float* c,  float* a,  float* b, int dim1) {
     const int THRDSZ = 32;
-    const int BLOCKSZ = (dim1 + THRDSZ - 1) / THRDSZ; // Calculate blocks to cover `dim1`
+    const int BLOCKSZ = (dim1 + THRDSZ - 1) / THRDSZ; // Calculate blocks to cover dim1
 
-    // Allocate device memory
+   
     float* tempa, * tempb, * tempc;
     cudaError_t err;
 
@@ -46,14 +46,13 @@ float* addWithCuda(float* c,  float* a,  float* b, int dim1) {
     // Launch kernel
     vectorAddUM << <BLOCKSZ, THRDSZ >> > (tempc, tempa, tempb, dim1);
 
-    // Synchronize and check for errors
     cudaDeviceSynchronize();
     err = cudaGetLastError();
     if (err != cudaSuccess) {
         std::cerr << "Kernel launch failed: " << cudaGetErrorString(err) << std::endl;
     }
 
-    // Copy the result back to host
+
     cudaMemcpy(c, tempc, dim1 * sizeof(float), cudaMemcpyDeviceToHost);
 
     // Free device memory
@@ -69,25 +68,25 @@ __global__ void multiplyVectorsKernel(float* A, float* B, float* result, int N) 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idx < N) {
-        result[idx] = A[idx] * B[idx]; // Multiply corresponding components
+        result[idx] = A[idx] * B[idx]; 
     }
 }
 __global__ void sumVectorKernel(float* result, float* sumResult, int N) {
-    __shared__ float partialSum[256]; // Shared memory for partial sums
+    __shared__ float partialSum[256]; 
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int threadID = threadIdx.x;
 
     if (idx < N) {
-        partialSum[threadID] = result[idx]; // Load values into shared memory
+        partialSum[threadID] = result[idx]; 
     }
     else {
-        partialSum[threadID] = 0.0f; // Handle out-of-bound indices
+        partialSum[threadID] = 0.0f; 
     }
 
     __syncthreads();
 
-    // Reduction within the block to sum the values
+
     for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
         if (threadID < stride) {
             partialSum[threadID] += partialSum[threadID + stride];
@@ -95,7 +94,6 @@ __global__ void sumVectorKernel(float* result, float* sumResult, int N) {
         __syncthreads();
     }
 
-    // The first thread of the block writes the sum to the global result array
     if (threadID == 0) {
         sumResult[blockIdx.x] = partialSum[0];
     }
@@ -120,14 +118,14 @@ float dotCUDA(float* vec1, float* vec2, int N) {
     // Launch kernel to multiply vectors
     multiplyVectorsKernel << <numBlocks, 256 >> > (d_vec1, d_vec2, d_result, N);
 
-    // Launch kernel to sum the result vector
+   
     sumVectorKernel << <numBlocks, 256 >> > (d_result, d_sumResult, N);
 
     // Copy partial results back to host
     float* partialResults = new float[numBlocks];
     cudaMemcpy(partialResults, d_sumResult, numBlocks * sizeof(float), cudaMemcpyDeviceToHost);
 
-    // Sum the partial results to get the final sum
+    
     for (int i = 0; i < numBlocks; ++i) {
         sum += partialResults[i];
     }
@@ -145,7 +143,6 @@ float dotCUDA(float* vec1, float* vec2, int N) {
 __global__ void matrixVectorMulKernel(float* A, float* x, float* y, int M, int N) {
     int row = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // Only process rows within bounds
     if (row < M) {
         float sum = 0.0f;
         // Compute the dot product of row `row` of A and vector x
@@ -239,7 +236,7 @@ void applyReLU(float* input, float* output, int N) {
     // Check for errors
     cudaDeviceSynchronize();
 
-    // Copy the result back to host
+
     cudaMemcpy(output, d_output, size, cudaMemcpyDeviceToHost);
 
     // Free device memory
@@ -263,7 +260,7 @@ __global__ void softmaxKernel(float* input, float* output, int N) {
     if (idx < N) {
         float sumExp = 0.0f;
 
-        // First, compute the sum of the exponentials (this could be optimized if using shared memory)
+        
         for (int i = 0; i < N; i++) {
             sumExp += expf(input[i]);
         }
@@ -292,7 +289,6 @@ void applySoftmax(float* input, float* output, int N) {
     // Check for errors
     cudaDeviceSynchronize();
 
-    // Copy the result back to host
     cudaMemcpy(output, d_output, size, cudaMemcpyDeviceToHost);
 
     // Free device memory
@@ -302,7 +298,6 @@ void applySoftmax(float* input, float* output, int N) {
 __global__ void sigmoidGradientKernel(const float* x, float* grad, int N) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // Make sure the thread is within the bounds of the input vector
     if (idx < N) {
         // Sigmoid of the input element
         float sigmoid_val = 1.0f / (1.0f + expf(-x[idx]));
@@ -323,7 +318,6 @@ void sigmoidGradient(const float* x, float* grad, int N) {
     // Copy the input data from host to device
     cudaMemcpy(d_x, x, N * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Define grid and block size for CUDA kernel
     int blockSize = 256;  // Number of threads per block
     int numBlocks = (N + blockSize - 1) / blockSize;  // Number of blocks needed
 
@@ -341,7 +335,7 @@ void sigmoidGradient(const float* x, float* grad, int N) {
 __global__ void softmaxGradientKernel(const float* x, float* grad, int N) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // Ensure we're within bounds of the input vector
+
     if (idx < N) {
         // First, compute the softmax values for the input vector
         float sum_exp = 0.0f;
@@ -374,7 +368,6 @@ void softmaxGradient(const float* x, float* grad, int N) {
     // Copy the input data from host to device
     cudaMemcpy(d_x, x, N * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Define grid and block size for CUDA kernel
     int blockSize = 256;  // Number of threads per block
     int numBlocks = (N + blockSize - 1) / blockSize;  // Number of blocks needed
 
@@ -384,7 +377,6 @@ void softmaxGradient(const float* x, float* grad, int N) {
     // Copy the result back from device to host
     cudaMemcpy(grad, d_grad, N * N * sizeof(float), cudaMemcpyDeviceToHost);
 
-    // Free the allocated memory on the device
     cudaFree(d_x);
     cudaFree(d_grad);
 }
@@ -392,7 +384,6 @@ void softmaxGradient(const float* x, float* grad, int N) {
 __global__ void reluGradientKernel(const float* x, float* grad, int N) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // Make sure the thread is within the bounds of the input vector
     if (idx < N) {
         // Gradient of ReLU: 1 if x > 0, 0 if x <= 0
         grad[idx] = (x[idx] > 0.0f) ? 1.0f : 0.0f;
@@ -409,14 +400,13 @@ void reluGradient(const float* x, float* grad, int N) {
     // Copy the input data from host to device
     cudaMemcpy(d_x, x, N * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Define grid and block size for CUDA kernel
     int blockSize = 256;  // Number of threads per block
     int numBlocks = (N + blockSize - 1) / blockSize;  // Number of blocks needed
 
     // Launch the kernel
     reluGradientKernel << <numBlocks, blockSize >> > (d_x, d_grad, N);
 
-    // Copy the result back from device to host
+
     cudaMemcpy(grad, d_grad, N * sizeof(float), cudaMemcpyDeviceToHost);
 
     // Free the allocated memory on the device
@@ -427,7 +417,7 @@ void reluGradient(const float* x, float* grad, int N) {
 __global__ void rowMatrixMulKernel(float* row, float* matrix, float* result, int n, int m) {
     int col = blockIdx.x * blockDim.x + threadIdx.x; // Column index of the result vector
 
-    // Check if the thread is within the valid range of result vector's size
+    
     if (col < m) {
         float sum = 0.0f;
 
@@ -456,7 +446,6 @@ void rowMatrixMul(float* row, float* matrix, float* result, int n, int m) {
     cudaMemcpy(d_row, row, n * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_matrix, matrix, n * m * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Launch the kernel
     int blockSize = 256;  // Number of threads per block
     int numBlocks = (m + blockSize - 1) / blockSize;  // Ensure we cover all columns
     rowMatrixMulKernel << <numBlocks, blockSize >> > (d_row, d_matrix, d_result, n, m);
@@ -471,7 +460,7 @@ void rowMatrixMul(float* row, float* matrix, float* result, int n, int m) {
 }
 
 __global__ void transposeKernel(float* input, float* output, int width, int height) {
-    // Calculate row and column index in the transposed output matrix
+
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -505,7 +494,7 @@ __global__ void rsmeKernel(float* pred, float* actual, float* output, int N) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int tid = threadIdx.x;
 
-    // Each thread computes squared difference for its data point, if within bounds
+   
     temp[tid] = (idx < N) ? (pred[idx] - actual[idx]) * (pred[idx] - actual[idx]) : 0.0f;
 
     __syncthreads(); // Synchronize threads to prepare for reduction
@@ -537,7 +526,6 @@ float computeRMSE(float* pred, float* actual, int N) {
     cudaMemcpy(d_actual, actual, N * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_output, h_output, sizeof(float), cudaMemcpyHostToDevice);
 
-    // Launch kernel with one block and threads, each block handling part of the array
     int blockSize = 256;
     int numBlocks = (N + blockSize - 1) / blockSize;
     rsmeKernel << <numBlocks, blockSize, blockSize * sizeof(float) >> > (d_pred, d_actual, d_output, N);
@@ -564,7 +552,6 @@ __global__ void rsmeDerivativeKernel(float* pred, float* actual, float* grad, in
     }
 }
 
-// Host function to compute RMSE derivative
 void computeRMSEDerivative(float* pred, float* actual, float* grad, int N, float RMSE) {
     float* d_pred, * d_actual, * d_grad;
 
@@ -620,15 +607,44 @@ std::vector<std::pair<float, float>> generateLinearData(int num_samples, float s
 
     std::random_device rd;
     std::mt19937 gen(rd()); // Mersenne Twister RNG
-    std::uniform_real_distribution<> x_dist(0.0, 10.0); // Generate x values between 0 and 10
+    std::uniform_real_distribution<> x_dist(0.0, 10.0); 
     std::normal_distribution<> noise_dist(0.0, noise_stddev); // Gaussian noise
 
     for (int i = 0; i < num_samples; ++i) {
         float x = x_dist(gen);
         float noise = noise_dist(gen);
-        float y = slope * x + intercept + noise; // Linear function with noise
+        float y = slope * x + intercept; // Linear function with noise
         data.emplace_back(x, y);
     }
 
     return data;
+}
+
+__global__ void scaleVector(float* d_vector, float scalar, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        d_vector[idx] *= scalar;
+    }
+}
+
+
+void scaleVectorHost(float* h_vector, float scalar, int size) {
+    float* d_vector;
+
+    // Allocate device memory
+    cudaMalloc(&d_vector, size * sizeof(float));
+
+    // Copy vector data from host to device
+    cudaMemcpy(d_vector, h_vector, size * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Launch the kernel with 256 threads per block
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (size + threadsPerBlock - 1) / threadsPerBlock;
+    scaleVector << <blocksPerGrid, threadsPerBlock >> > (d_vector, scalar, size);
+
+    // Copy result back to host
+    cudaMemcpy(h_vector, d_vector, size * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_vector);
 }

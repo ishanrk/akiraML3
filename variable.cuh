@@ -51,8 +51,11 @@ public:
 
 	variable elementWise(variable& other);
 
+	variable scale(float scalar);
+
 	void update(float lr);
 };
+
 
 
 

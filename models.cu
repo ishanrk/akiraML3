@@ -26,14 +26,13 @@ std::pair<float, float> scalarLinearRegression(std::vector<std::pair<float, floa
 	variable loss(1, 1, false);
 	cout << *(theta.data) << endl;
 	cout << *(X.data) << endl;
-	for (int x = 0; x < 100; x++)
+	for (int x = 0; x < 5000; x++)
 	{
 		prod = X.elementWise(theta);
 		
 		layer = prod + bias;
 		loss = layer.RMSELOSS(Y);
-		
-		std::cout << "LOSS AT EPOCH: " << x << " is " << *(loss.data) << std::endl;
+	
 		float *arr = { 0 };
 		loss.backward(&loss, arr, 0);
 		
