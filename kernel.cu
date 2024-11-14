@@ -11,7 +11,7 @@ void random_init(float* data, int dim1, int dim2)
 
     // Set every element in data to this random value
     for (int i = 0; i < dim1 * dim2; ++i) {
-        data[i] = random_value;
+        data[i] = 0;
     }
 }
 
@@ -534,7 +534,7 @@ float computeRMSE(float* pred, float* actual, int N) {
 
     // Calculate RMSE
 
-    output = sqrtf(output / N);
+    output = sqrt(output / N);
 
     // Free memory
     cudaFree(d_pred);
@@ -548,7 +548,7 @@ __global__ void rsmeDerivativeKernel(float* pred, float* actual, float* grad, in
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idx < N) {
-        grad[idx] = (pred[idx] - actual[idx]) / (N*RMSE);
+        grad[idx] = -2* (pred[idx] - actual[idx]) / (N );
     }
 }
 
@@ -620,35 +620,35 @@ std::vector<std::pair<float, float>> generateLinearData(int num_samples, float s
     return data;
 }
 
-__global__ void scaleVector(float* d_vector, float scalar, int size) {
+__global__ void scaleVector(float* d_input, float* d_output, float scalar, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
-        d_vector[idx] *= scalar;
+        d_output[idx] = d_input[idx] * scalar;
     }
 }
 
+void scaleVectorHost(float* h_input, float* h_output, float scalar, int size) {
+    float* d_input, * d_output;
 
-void scaleVectorHost(float* h_vector, float scalar, int size) {
-    float* d_vector;
+    // Allocate device memory for input and output vectors
+    cudaMalloc(&d_input, size * sizeof(float));
+    cudaMalloc(&d_output, size * sizeof(float));
 
-    // Allocate device memory
-    cudaMalloc(&d_vector, size * sizeof(float));
-
-    // Copy vector data from host to device
-    cudaMemcpy(d_vector, h_vector, size * sizeof(float), cudaMemcpyHostToDevice);
+    // Copy input vector data from host to device
+    cudaMemcpy(d_input, h_input, size * sizeof(float), cudaMemcpyHostToDevice);
 
     // Launch the kernel with 256 threads per block
     int threadsPerBlock = 256;
     int blocksPerGrid = (size + threadsPerBlock - 1) / threadsPerBlock;
-    scaleVector << <blocksPerGrid, threadsPerBlock >> > (d_vector, scalar, size);
+    scaleVector << <blocksPerGrid, threadsPerBlock >> > (d_input, d_output, scalar, size);
 
     // Copy result back to host
-    cudaMemcpy(h_vector, d_vector, size * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_output, d_output, size * sizeof(float), cudaMemcpyDeviceToHost);
 
     // Free device memory
-    cudaFree(d_vector);
+    cudaFree(d_input);
+    cudaFree(d_output);
 }
-
 __global__ void matrixMultiplyKernel(float* A, float* B, float* C, int M, int N, int P) {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;

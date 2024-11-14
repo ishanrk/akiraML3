@@ -4,11 +4,12 @@ std::pair<float, float> scalarLinearRegression(std::vector<std::pair<float, floa
 {
 	float* data = (float*)malloc(dataset.size()* sizeof(float));
 	float* target = (float*)malloc(dataset.size() * sizeof(float));
-
+	float*rand = (float*)malloc(dataset.size() * sizeof(float));
 	for (int x = 0; x < dataset.size();x++)
 	{
 		data[x] = dataset[x].first;
 		target[x] = dataset[x].second;	
+		rand[x] = 1;
 	}
 
 	variable X(dataset.size(), 1, false);
@@ -17,43 +18,35 @@ std::pair<float, float> scalarLinearRegression(std::vector<std::pair<float, floa
 	variable Y(dataset.size(), 1, false);
 	Y.setData(target);
 
-	variable theta(dataset.size(), 1, true);
-	variable bias(dataset.size(), 1, true);
+	variable theta(1, 1, true);
+	variable bias(1, 1, true);
+	variable biasVec(dataset.size(), 1, false);
+	variable biasVector(dataset.size(), 1, false);
+	biasVec.setData(rand);
 	
 	variable parameters[2] = { theta, bias };
 	variable prod(dataset.size(), 1, false);
 	variable layer(dataset.size(), 1, false);
 	variable loss(1, 1, false);
-	cout << *(theta.data) << endl;
-	cout << *(X.data) << endl;
-	for (int x = 0; x < 100; x++)
+
+	for (int x = 0; x < 1000; x++)
 	{
-		prod = X.elementWise(theta);
-		
-		layer = prod + bias;
+		prod = X.scale(theta);
+		biasVector = biasVec.scale(bias);
+		layer = prod + biasVector;
 		loss = layer.RMSELOSS(Y);
 	
 		float *arr = { 0 };
+		
 		loss.reverseMode(arr, 0);
 		
 		float derivTheta = 0;
 		float derivBias = 0;
-		for (int x = 0; x < dataset.size();x++)
-		{
-			derivTheta += theta.backwardGrad[x];
-		}
-		for (int x = 0; x < dataset.size();x++)
-		{
-			theta.data[x] = theta.data[x] - learningRate * derivTheta;
-		}
-		for (int x = 0; x < dataset.size();x++)
-		{
-			derivBias += bias.backwardGrad[x];
-		}
-		for (int x = 0; x < dataset.size();x++)
-		{
-			bias.data[x] = bias.data[x] - learningRate * derivBias;
-		}
+		theta.data[x] = theta.data[x] - learningRate * derivTheta;
+		bias.data[x] = bias.data[x] - learningRate * derivBias;
+		
+		loss.print();
+		std::cout << *(theta.data) << " " << *(theta.data) << std::endl;
 	}
 
 	return std::make_pair(theta.data[0], bias.data[0]);

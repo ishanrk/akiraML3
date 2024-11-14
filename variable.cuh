@@ -44,13 +44,13 @@ public:
 	variable variable::softmax() ;
 	variable variable::relu() ;
 
-	int backward(variable* root,float* gradAccum, int childID);
+	
 
 	variable RMSELOSS(variable& trueOutput);
 
 	variable elementWise(variable& other);
 
-	variable scale(float scalar);
+	variable scale(variable& scalar);
 
 
 	void reverseMode(float* gradAccum, int childID);

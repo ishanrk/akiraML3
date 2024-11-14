@@ -44,6 +44,7 @@ variable::~variable()
 }
 variable variable::operator+( variable& other)  {
     // Check if dimensions match
+    std::cout << dim1 << dim2 << other.dim1 << other.dim2 << std::endl;
     if (this->dim1 != other.dim1 || this->dim2 != other.dim2) {
         throw std::invalid_argument("Dimensions must match for addition.");
     }
@@ -56,6 +57,7 @@ variable variable::operator+( variable& other)  {
         matrix = false;
     }
     opID = 1;
+    other.opID = 1;
 
     // Create a new variable to store the result with dim1 and dim2 dimensions
     std::vector<variable*> temp;
@@ -123,6 +125,7 @@ variable variable::dot( variable& other)
         throw std::invalid_argument("Cannot be perfromed on matrix.");
     }
     opID = 1;
+    other.opID = 1;
     matrix = false;
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
@@ -148,6 +151,7 @@ variable variable::matrixMulVec( variable& other)
     }
     matrix = false;
     opID = 2;
+    other.opID = 2;
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
     temp.push_back(const_cast<variable*>(&other));
@@ -208,6 +212,7 @@ variable variable::sigmoid()
         matrix = false;
     }
     opID = 1;
+    
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
     variable result(this->dim1, this->dim2, false, temp);
@@ -230,6 +235,7 @@ variable variable::softmax()
         matrix = false;
     }
     opID = 1;
+    
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
     variable result(this->dim1, this->dim2, false, temp);
@@ -251,6 +257,7 @@ variable variable::relu()
         matrix = false;
     }
     opID = 1;
+    
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
     variable result(this->dim1, this->dim2, false, temp);
@@ -262,118 +269,11 @@ variable variable::relu()
     return result;
 }
 
-int variable::backward(variable * root, float* gradAccum, int childID)
-{
-    
-    if (this == root)
-    {
-    
-        backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
-        std::fill(backwardGrad, backwardGrad + dim1, 1.0f);
-       
-        for (int x = 0; x<children.size();x++)
-        {
- 
-            children[x]->backward(root,backwardGrad,x);
-       
-        }
-    }
-    else
-    {
-    
-        backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
-   
-        if ((this->parents[0].dim1 == 1) && (this->parents[0].dim2 == 1))
-        {
-            // this indicates dot product 
-           
-       
-            
-            if ((this->dim1 == 1) && (this->dim2 == 1))
-            {
-             
-                if (childID == 0)
-                {
-                    *(backwardGrad) = dotCUDA(gradAccum, parents[0].gradientChild1, dim1 * dim2);
-                    
-                }
-                else
-                {
-                    *(backwardGrad) = dotCUDA(gradAccum, parents[0].gradientChild2, dim1 * dim2);
-                   
-                }
-                
-                
-                for (int x = 0;x < children.size();x++)
-                {
-                    
-                    if (children[x] != this)
-                    {
-                        
-                        children[x]->backward(root, backwardGrad, x);
-                    }
-                    
-                }
-            }
-            else
-            {
-               
-                backwardGrad = parents[0].gradientChild1;
-                
-                for (int x = 0;x < children.size();x++)
-                {
-
-                    if (children[x] != this)
-                    {
-
-                        children[x]->backward(root, backwardGrad, x);
-                    }
-
-                }
-            }
-
-
-        }
-        else if ((this->parents[0],dim1 == 1) || (this->parents[0].dim2 == 1))
-        {
-            if ((this->dim1 == 1) || (this->dim2 == 1))
-            {
-               
-                if (childID== 0)
-                {
-                    
-                    elementwiseMultiply(gradAccum, parents[0].gradientChild1, backwardGrad, dim1 * dim2);
-                    
-                }
-                else
-                {
-                    
-                    elementwiseMultiply(gradAccum, parents[0].gradientChild2, backwardGrad, dim1 * dim2);
-                    
-                }
-                
-                for (int x = 0; x<children.size(); x++)
-                {
-                   
-                    if (children[x] != this)
-                    {
-                       
-                        children[x]->backward(root, backwardGrad, x);
-                     
-                    }
-                }
-            }
-        }
-        
-    }
-    return 1;
-
-}
-
 variable variable::elementWise(variable& other)
 {
     matrix = false;
     opID = 1;
+    other.opID = 1;
     if (this->dim1 != other.dim1 || this->dim2 != other.dim2) {
         throw std::invalid_argument("Dimensions must match for dot product.");
     }
@@ -396,6 +296,7 @@ variable variable::elementWise(variable& other)
 variable variable::RMSELOSS( variable &trueOutput)
 {
     opID = 3;
+    
     if (dim1 != 1 && dim2 != 1)
     {
         matrix = true;
@@ -433,28 +334,30 @@ void variable::update(float lr)
 
 void variable::reverseMode(float* gradAccum, int childID)
 {
+    backwardGrad = (float*)malloc(dim1 * dim2 * sizeof(float));
+ 
     if (parents.empty()) // root note
     {
-        backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+        
+        
         std::fill(backwardGrad, backwardGrad + dim1, 1.0f);
-        if (opID != 0)
-        {
+        
             for (int x = 0; x < children.size();x++)
             {
-                // lead node checker
-
-                children[x]->reverseMode(backwardGrad, x);
-
+                if (children[x] != this)
+                {
+                    children[x]->reverseMode(backwardGrad, x);
+                }
             }
-        }
+        
     }
     else
     {
-        backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+        
         if (opID == 3)
         {
             matrixMultiply(parents[0].gradientChild1, gradAccum, backwardGrad, dim1, 1, 1);
-            
+           
                 for (int x = 0; x < children.size();x++)
                 {
                     if (children[x] != this)
@@ -463,13 +366,14 @@ void variable::reverseMode(float* gradAccum, int childID)
                     }
 
                 }
+                
             
         }
         else if (opID == 2)
         {
             if (childID == 0)
             {
-                if (matrix = true)
+                if (matrix == true)
                 {
                     matrixMultiply(gradAccum, parents[0].gradientChild1, backwardGrad, dim1, 1, dim2);
                 }
@@ -480,7 +384,7 @@ void variable::reverseMode(float* gradAccum, int childID)
             }
             else
             {
-                if (matrix = true)
+                if (matrix == true)
                 {
                     matrixMultiply(gradAccum, parents[0].gradientChild2, backwardGrad, dim1, 1, dim2);
                 }
@@ -489,7 +393,7 @@ void variable::reverseMode(float* gradAccum, int childID)
                     matrixMultiply(gradAccum, parents[0].gradientChild2, backwardGrad, 1, dim1, dim2);
                 }
             }
-
+           
             
                 for (int x = 0; x < children.size();x++)
                 {
@@ -502,7 +406,16 @@ void variable::reverseMode(float* gradAccum, int childID)
         }
         else if (opID == 1)
         {
-            elementwiseMultiply(gradAccum, parents[0].gradientChild1, backwardGrad, dim1 * dim2);
+            if (childID == 0)
+            {
+                elementwiseMultiply(gradAccum, parents[0].gradientChild1, backwardGrad, dim1 * dim2);
+            }
+            else
+            {
+                elementwiseMultiply(gradAccum, parents[0].gradientChild2, backwardGrad, dim1 * dim2);
+            }
+            
+           
             for (int x = 0; x < children.size();x++)
             {
                 if (children[x] != this)
@@ -511,8 +424,60 @@ void variable::reverseMode(float* gradAccum, int childID)
                 }
             }
         }
-        
+        else if (opID == 4)
+        {
+            if (childID == 0)
+            {
+                scaleVectorHost(gradAccum, backwardGrad, *(parents[0].gradientChild1), dim1 * dim2);
+                
+            }
+            else
+            {
+                *(backwardGrad) =  dotCUDA(gradAccum, parents[0].gradientChild2, parents[0].children[0]->dim1* parents[0].children[0]->dim2);
+                
+            }
+
+            for (int x = 0; x < children.size();x++)
+            {
+                if (children[x] != this)
+                {
+                    children[x]->reverseMode(backwardGrad, x);
+                }
+            }
+        }
+       
     }
+}
+
+variable variable::scale(variable& other)
+{
+    this->opID = 4;
+    other.opID = 4;
+
+    if (dim1 != 1 && dim2 != 1)
+    {
+        matrix = true;
+    }
+    else
+    {
+        matrix = false;
+    }
+    
+    std::vector<variable*> temp;
+    temp.push_back(const_cast<variable*>(this));
+    temp.push_back(const_cast<variable*>(&other));
+    variable result(dim1, dim2, false, temp);
+
+    result.data = (float*)malloc(dim1 * dim2 * sizeof(float));
+    result.gradientChild1 = (float*)malloc(1 * sizeof(float));
+    result.gradientChild2 = (float*)malloc(dim1 * dim2 * sizeof(float));
+    cudaMemcpy(result.gradientChild1, other.data, 1 * sizeof(float), cudaMemcpyHostToHost);
+    cudaMemcpy(result.gradientChild2, this->data, dim1 * dim2*sizeof(float), cudaMemcpyHostToHost);
+    scaleVectorHost(this->data, result.data, *(other.data), dim1*dim2);
+    this->parents.push_back(result);
+    other.parents.push_back(result);
+    return result;
+
 }
 
 
