@@ -3,11 +3,12 @@
 AkiraML is a CUDA-based C++ library designed for building and training machine learning models with support for custom variables, backpropagation, activation functions, and basic operations like matrix multiplication and element-wise operations. This library is an early prototype and currently supports core features needed for defining and manipulating tensors (variables) and performing basic operations.
 
 ## Features
-- **Variable Class**: Supports tensor-like variable handling, which includes initialization, addition, matrix-vector multiplication, element-wise operations, and scaling.
-- **Backpropagation**: Allows for basic gradient calculation with respect to operations.
-- **Activation Functions**: Includes ReLU, Sigmoid, and Softmax functions with CUDA-based forward and backward (gradient) computations.
-- **RMSE Loss**: Supports calculation of Root Mean Square Error loss for training purposes.
-- **Linear Regression Model**: An example machine learning model is included to demonstrate how to use AkiraML for training with synthetic data.
+- **Auto-Differentiation Engine**: Implements reverse-mode automatic differentiation with computational graph construction, chain rule gradient computation, and Jacobian matrix calculations for vector-valued functions.
+- **Neural Network Framework**: Complete multi-layer perceptron implementation supporting both regression and classification tasks with configurable architectures, batch processing, and one-hot encoding utilities.
+- **Advanced Optimizers**: Three CUDA-accelerated optimization algorithms (Adam, RMSprop, SGD) with adaptive learning rates, momentum, and second-order moment estimation for efficient parameter updates.
+- **CUDA-Accelerated Operations**: 15+ parallel GPU kernels for matrix-vector multiplication, element-wise operations, activation functions (ReLU, Sigmoid, Softmax), gradient computations, and matrix transposition.
+- **Tensor Operations**: Comprehensive variable class supporting addition, dot product, matrix multiplication, scaling, and seamless integration with computational graphs for automatic backpropagation.
+- **Comprehensive Testing**: 13+ test cases covering vector operations, activation functions, loss calculations, linear regression models, neural network training, and optimizer performance comparisons with synthetic data generation.
 
 ## Dependencies
 1. **CUDA**: Required for GPU computations.
