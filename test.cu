@@ -1,19 +1,21 @@
 #include <iostream>
-#include "models.cuh"
+#include "tests.cuh"
 
 using namespace std;
 
 int main()
 {
-    int num_samples = 10;
-    float slope = 10000;      // Specify slope (m)
-    float intercept = -988;  // Specify intercept (c)
-    float noise_stddev = 0.00001; // Standard deviation of noise
-
-    // Generate the dataset
-    std::vector<std::pair<float, float>> dataset = generateLinearData(num_samples, slope, intercept, noise_stddev);
-
-    pair<float, float> answer = scalarLinearRegression(dataset, 0.001);
-    cout << answer.first << " " <<answer.second << std::endl;
-	return 0;
+    cout << "=== AkiraML3 Test Suite ===" << std::endl;
+    cout << "Running non-neural network tests..." << std::endl;
+    cout << std::endl;
+    
+    try {
+        runNonNeuralNetworkTests();
+        cout << "=== All Tests Complete ===" << endl;
+    } catch (const std::exception& e) {
+        cout << "Error running tests: " << e.what() << endl;
+        return 1;
+    }
+    
+    return 0;
 }

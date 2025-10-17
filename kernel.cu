@@ -648,3 +648,108 @@ void scaleVectorHost(float* h_vector, float scalar, int size) {
     // Free device memory
     cudaFree(d_vector);
 }
+
+// Adam optimizer kernels
+__global__ void adamUpdateKernel(float* params, float* gradients, float* m, float* v, 
+                                float learning_rate, float beta1, float beta2, 
+                                float epsilon, int t, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < N) {
+        // Update biased first moment estimate
+        m[idx] = beta1 * m[idx] + (1.0f - beta1) * gradients[idx];
+        
+        // Update biased second raw moment estimate
+        v[idx] = beta2 * v[idx] + (1.0f - beta2) * gradients[idx] * gradients[idx];
+        
+        // Compute bias-corrected first moment estimate
+        float m_hat = m[idx] / (1.0f - powf(beta1, t));
+        
+        // Compute bias-corrected second raw moment estimate
+        float v_hat = v[idx] / (1.0f - powf(beta2, t));
+        
+        // Update parameters
+        params[idx] = params[idx] - learning_rate * m_hat / (sqrtf(v_hat) + epsilon);
+    }
+}
+
+void adamUpdate(float* params, float* gradients, float* m, float* v, 
+                float learning_rate, float beta1, float beta2, 
+                float epsilon, int t, int N) {
+    float* d_params, * d_gradients, * d_m, * d_v;
+    
+    // Allocate device memory
+    cudaMalloc(&d_params, N * sizeof(float));
+    cudaMalloc(&d_gradients, N * sizeof(float));
+    cudaMalloc(&d_m, N * sizeof(float));
+    cudaMalloc(&d_v, N * sizeof(float));
+    
+    // Copy data to device
+    cudaMemcpy(d_params, params, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_gradients, gradients, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_m, m, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_v, v, N * sizeof(float), cudaMemcpyHostToDevice);
+    
+    // Launch kernel
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+    adamUpdateKernel << <numBlocks, blockSize >> > (d_params, d_gradients, d_m, d_v, 
+                                                   learning_rate, beta1, beta2, epsilon, t, N);
+    
+    // Copy results back to host
+    cudaMemcpy(params, d_params, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(m, d_m, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(v, d_v, N * sizeof(float), cudaMemcpyDeviceToHost);
+    
+    // Free device memory
+    cudaFree(d_params);
+    cudaFree(d_gradients);
+    cudaFree(d_m);
+    cudaFree(d_v);
+}
+
+// RMSprop optimizer kernels
+__global__ void rmspropUpdateKernel(float* params, float* gradients, float* v, 
+                                   float learning_rate, float decay_rate, 
+                                   float epsilon, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < N) {
+        // Update running average of squared gradients
+        v[idx] = decay_rate * v[idx] + (1.0f - decay_rate) * gradients[idx] * gradients[idx];
+        
+        // Update parameters
+        params[idx] = params[idx] - learning_rate * gradients[idx] / (sqrtf(v[idx]) + epsilon);
+    }
+}
+
+void rmspropUpdate(float* params, float* gradients, float* v, 
+                   float learning_rate, float decay_rate, 
+                   float epsilon, int N) {
+    float* d_params, * d_gradients, * d_v;
+    
+    // Allocate device memory
+    cudaMalloc(&d_params, N * sizeof(float));
+    cudaMalloc(&d_gradients, N * sizeof(float));
+    cudaMalloc(&d_v, N * sizeof(float));
+    
+    // Copy data to device
+    cudaMemcpy(d_params, params, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_gradients, gradients, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_v, v, N * sizeof(float), cudaMemcpyHostToDevice);
+    
+    // Launch kernel
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+    rmspropUpdateKernel << <numBlocks, blockSize >> > (d_params, d_gradients, d_v, 
+                                                      learning_rate, decay_rate, epsilon, N);
+    
+    // Copy results back to host
+    cudaMemcpy(params, d_params, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(v, d_v, N * sizeof(float), cudaMemcpyDeviceToHost);
+    
+    // Free device memory
+    cudaFree(d_params);
+    cudaFree(d_gradients);
+    cudaFree(d_v);
+}

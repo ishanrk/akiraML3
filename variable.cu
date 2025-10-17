@@ -1,4 +1,5 @@
 #include "variable.cuh"
+#include "optimizers.cuh"
 
 variable::variable(int dimension1, int dimension2, bool random, std::vector<variable*>currChildren)
 {
@@ -8,10 +9,11 @@ variable::variable(int dimension1, int dimension2, bool random, std::vector<vari
     children = currChildren;
     data = (float*)malloc(dim1 * dim2 * sizeof(float));
     gradientChild1 = (float*)malloc(dim1 * dim2 * sizeof(float));
+    optimizer = nullptr;
     if (currChildren.empty()) { children.push_back(this); }
     gradC11 = dim1;
     gradC12 = dim2;
-    std::fill(gradientChild1, gradientChild1 + dim1, 1.0f);
+    std::fill(gradientChild1, gradientChild1 + dim1 * dim2, 1.0f);
 
     if (rand)
     { 
@@ -47,10 +49,10 @@ variable variable::operator+( variable& other)  {
     temp.push_back(const_cast<variable*>(&other));
     variable result(this->dim1, this->dim2, false, temp);
 
-    // Allocate memory for `result` data and gradient on the GPU using cudaMallocManaged
-    result.data = (float*)malloc(dim1 * sizeof(float));
-    result.gradientChild1 = (float*)malloc(dim1 * sizeof(float));
-    result.gradientChild2 = (float*)malloc(dim1 * sizeof(float));
+    // Allocate memory for `result` data and gradient
+    result.data = (float*)malloc(dim1 * dim2 * sizeof(float));
+    result.gradientChild1 = (float*)malloc(dim1 * dim2 * sizeof(float));
+    result.gradientChild2 = (float*)malloc(dim1 * dim2 * sizeof(float));
     result.gradC11 = dim1;
     result.gradC12 = dim2;
     result.gradC21 = dim1;
@@ -59,9 +61,9 @@ variable variable::operator+( variable& other)  {
     
     result.data = addWithCuda(result.data, this->data, other.data, dim1);
   
-    // Set `gradient` of the new variable to 0
-    std::fill(result.gradientChild1, result.gradientChild1 + dim1, 1.0f);
-    std::fill(result.gradientChild2, result.gradientChild2 + dim1, 1.0f);
+    // Set `gradient` of the new variable to 1
+    std::fill(result.gradientChild1, result.gradientChild1 + dim1 * dim2, 1.0f);
+    std::fill(result.gradientChild2, result.gradientChild2 + dim1 * dim2, 1.0f);
 
     // Add both operands as children to the result
     this->parents.push_back(result);
@@ -115,10 +117,10 @@ variable variable::dot( variable& other)
     result.gradC21 = dim1;
     result.gradC22 = dim2;
     result.data = (float*)malloc(sizeof(float));
-    result.gradientChild1 = (float*)malloc(dim1 * sizeof(float));
-    result.gradientChild2 = (float*)malloc(dim1 * sizeof(float));
-    cudaMemcpy(result.gradientChild1, other.data, dim1 * sizeof(float), cudaMemcpyHostToHost);
-    cudaMemcpy(result.gradientChild2, this->data, dim1 * sizeof(float), cudaMemcpyHostToHost);
+    result.gradientChild1 = (float*)malloc(dim1 * dim2 * sizeof(float));
+    result.gradientChild2 = (float*)malloc(dim1 * dim2 * sizeof(float));
+    cudaMemcpy(result.gradientChild1, other.data, dim1 * dim2 * sizeof(float), cudaMemcpyHostToHost);
+    cudaMemcpy(result.gradientChild2, this->data, dim1 * dim2 * sizeof(float), cudaMemcpyHostToHost);
     *(result.data) = dotCUDA(this->data, other.data, dim1);
     this->parents.push_back(result);
     other.parents.push_back(result);
@@ -136,13 +138,13 @@ variable variable::matrixMulVec( variable& other)
     temp.push_back(const_cast<variable*>(&other));
     variable result(this->dim1, other.dim2, false, temp);
     result.data = (float*)malloc(this->dim1 * other.dim2 * sizeof(float));
-    result.gradientChild1 = (float*)malloc(other.dim1* sizeof(float));
-    result.gradientChild2 = (float*)malloc(this->dim1*this->dim2* sizeof(float));
+    result.gradientChild1 = (float*)malloc(other.dim1 * other.dim2 * sizeof(float));
+    result.gradientChild2 = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
 
     matrixVectorMul(this->data, other.data, result.data, this->dim1, this->dim2);
 
    
-    std::memcpy(result.gradientChild1, other.data, other.dim1 * sizeof(float));
+    std::memcpy(result.gradientChild1, other.data, other.dim1 * other.dim2 * sizeof(float));
     result.gradC11 = other.dim2;
     result.gradC12 = other.dim1;
 
@@ -242,7 +244,7 @@ int variable::backward(variable * root, float* gradAccum, int childID)
     {
     
         backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
-        std::fill(backwardGrad, backwardGrad + dim1, 1.0f);
+        std::fill(backwardGrad, backwardGrad + dim1 * dim2, 1.0f);
        
         for (int x = 0; x<children.size();x++)
         {
@@ -256,7 +258,7 @@ int variable::backward(variable * root, float* gradAccum, int childID)
     
         backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
    
-        if ((this->parents[0].dim1 == 1) && (this->parents[0].dim2 == 1))
+        if (!parents.empty() && (this->parents[0].dim1 == 1) && (this->parents[0].dim2 == 1))
         {
             // this indicates dot product 
            
@@ -265,15 +267,17 @@ int variable::backward(variable * root, float* gradAccum, int childID)
             if ((this->dim1 == 1) && (this->dim2 == 1))
             {
              
-                if (childID == 0)
-                {
-                    *(backwardGrad) = dotCUDA(gradAccum, parents[0].gradientChild1, dim1 * dim2);
-                    
-                }
-                else
-                {
-                    *(backwardGrad) = dotCUDA(gradAccum, parents[0].gradientChild2, dim1 * dim2);
-                   
+                if (!parents.empty()) {
+                    if (childID == 0 && parents[0].gradientChild1 != nullptr)
+                    {
+                        *(backwardGrad) = dotCUDA(gradAccum, parents[0].gradientChild1, dim1 * dim2);
+                        
+                    }
+                    else if (childID == 1 && parents[0].gradientChild2 != nullptr)
+                    {
+                        *(backwardGrad) = dotCUDA(gradAccum, parents[0].gradientChild2, dim1 * dim2);
+                       
+                    }
                 }
                 
                 
@@ -291,7 +295,9 @@ int variable::backward(variable * root, float* gradAccum, int childID)
             else
             {
                
-                backwardGrad = parents[0].gradientChild1;
+                if (!parents.empty() && parents[0].gradientChild1 != nullptr) {
+                    backwardGrad = parents[0].gradientChild1;
+                }
                 
                 for (int x = 0;x < children.size();x++)
                 {
@@ -307,22 +313,20 @@ int variable::backward(variable * root, float* gradAccum, int childID)
 
 
         }
-        else if ((this->parents[0],dim1 == 1) || (this->parents[0].dim2 == 1))
+        else if (!parents.empty() && ((this->parents[0].dim1 == 1) || (this->parents[0].dim2 == 1)))
         {
             if ((this->dim1 == 1) || (this->dim2 == 1))
             {
                
-                if (childID== 0)
-                {
-                    
-                    elementwiseMultiply(gradAccum, parents[0].gradientChild1, backwardGrad, dim1 * dim2);
-                    
-                }
-                else
-                {
-                    
-                    elementwiseMultiply(gradAccum, parents[0].gradientChild2, backwardGrad, dim1 * dim2);
-                    
+                if (!parents.empty()) {
+                    if (childID == 0 && parents[0].gradientChild1 != nullptr)
+                    {
+                        elementwiseMultiply(gradAccum, parents[0].gradientChild1, backwardGrad, dim1 * dim2);
+                    }
+                    else if (childID == 1 && parents[0].gradientChild2 != nullptr)
+                    {
+                        elementwiseMultiply(gradAccum, parents[0].gradientChild2, backwardGrad, dim1 * dim2);
+                    }
                 }
                 
                 for (int x = 0; x<children.size(); x++)
@@ -359,8 +363,8 @@ variable variable::elementWise(variable& other)
     result.data = (float*)malloc(dim1*dim2*sizeof(float));
     result.gradientChild1 = (float*)malloc(dim1*dim2 * sizeof(float));
     result.gradientChild2 = (float*)malloc(dim1 *dim2* sizeof(float));
-    cudaMemcpy(result.gradientChild1, other.data, dim1 * sizeof(float), cudaMemcpyHostToHost);
-    cudaMemcpy(result.gradientChild2, this->data, dim1 * sizeof(float), cudaMemcpyHostToHost);
+    cudaMemcpy(result.gradientChild1, other.data, dim1 * dim2 * sizeof(float), cudaMemcpyHostToHost);
+    cudaMemcpy(result.gradientChild2, this->data, dim1 * dim2 * sizeof(float), cudaMemcpyHostToHost);
     elementwiseMultiply(this->data, other.data, result.data, dim1 * dim2);
     this->parents.push_back(result);
     other.parents.push_back(result);
@@ -388,12 +392,32 @@ variable variable::RMSELOSS( variable &trueOutput)
 
 void variable::update(float lr)
 {
-    for (int x = 0; x < dim1 * dim2;x++)
-    {
-        std::cout << x << std::endl;
-        data[x] = data[x] - lr * this->backwardGrad[x];
+    if (backwardGrad != nullptr) {
+        for (int x = 0; x < dim1 * dim2; x++)
+        {
+            data[x] = data[x] - lr * this->backwardGrad[x];
+        }
     }
-    parents.pop_back();
+    if (!parents.empty()) {
+        parents.pop_back();
+    }
+}
+
+void variable::setOptimizer(std::shared_ptr<Optimizer> opt)
+{
+    optimizer = opt;
+}
+
+void variable::updateWithOptimizer(int iteration)
+{
+    if (optimizer != nullptr && backwardGrad != nullptr)
+    {
+        optimizer->update(*this, backwardGrad, iteration);
+    }
+    else
+    {
+        std::cout << "Warning: No optimizer set or no gradients available" << std::endl;
+    }
 }
 
 

@@ -48,3 +48,19 @@ void elementwiseMultiply(float* x, float* y, float* result, int N);
 std::vector<std::pair<float, float>> generateLinearData(int num_samples, float slope, float intercept, float noise_stddev);
 void scaleVectorHost(float* h_vector, float scalar, int size);
 __global__ void scaleVector(float* d_vector, float scalar, int size);
+
+// Adam optimizer functions
+__global__ void adamUpdateKernel(float* params, float* gradients, float* m, float* v, 
+                                float learning_rate, float beta1, float beta2, 
+                                float epsilon, int t, int N);
+void adamUpdate(float* params, float* gradients, float* m, float* v, 
+                float learning_rate, float beta1, float beta2, 
+                float epsilon, int t, int N);
+
+// RMSprop optimizer functions
+__global__ void rmspropUpdateKernel(float* params, float* gradients, float* v, 
+                                   float learning_rate, float decay_rate, 
+                                   float epsilon, int N);
+void rmspropUpdate(float* params, float* gradients, float* v, 
+                   float learning_rate, float decay_rate, 
+                   float epsilon, int N);

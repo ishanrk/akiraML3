@@ -1,0 +1,31 @@
+{
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "C_Cpp.default.compilerPath": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.40.33807/bin/Hostx64/x64/cl.exe",
+    "C_Cpp.default.cStandard": "c17",
+    "C_Cpp.default.cppStandard": "c++17",
+    "C_Cpp.default.intelliSenseMode": "windows-msvc-x64",
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/**",
+        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include",
+        "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.40.33807/include",
+        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/ucrt",
+        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/shared",
+        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/um",
+        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/winrt"
+    ],
+    "C_Cpp.default.defines": [
+        "WIN32",
+        "WIN64",
+        "_DEBUG",
+        "_CONSOLE"
+    ],
+    "files.associations": {
+        "*.cu": "cuda-cpp",
+        "*.cuh": "cuda-cpp"
+    },
+    "terminal.integrated.env.windows": {
+        "CUDA_PATH": "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.6",
+        "CUDA_PATH_V12_6": "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.6",
+        "PATH": "${env:PATH};C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.6\\bin;C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.6\\libnvvp"
+    }
+}

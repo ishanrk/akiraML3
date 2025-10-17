@@ -3,6 +3,10 @@
 #include<cuda_runtime.h>
 #include "kernel.cuh"
 #include<iostream>
+#include<memory>
+
+// Forward declaration
+class Optimizer;
 
 class variable
 {
@@ -21,6 +25,7 @@ public:
 	bool rand = true;
 	std::vector<variable*> children;
 	std::vector<variable> parents = {};
+	std::shared_ptr<Optimizer> optimizer;
 
 
 	variable(int dimension1, int dimension2 = 1, bool random = true, std::vector<variable*>currChildren = {});
@@ -54,6 +59,10 @@ public:
 	variable scale(float scalar);
 
 	void update(float lr);
+	
+	void setOptimizer(std::shared_ptr<Optimizer> opt);
+	
+	void updateWithOptimizer(int iteration);
 };
 
 

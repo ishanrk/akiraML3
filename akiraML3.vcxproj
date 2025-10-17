@@ -79,6 +79,7 @@
   <ItemGroup>
     <CudaCompile Include="kernel.cu" />
     <CudaCompile Include="models.cu" />
+    <CudaCompile Include="neural_network.cu" />
     <CudaCompile Include="test.cu" />
     <CudaCompile Include="tests.cu" />
     <CudaCompile Include="variable.cu" />
@@ -86,6 +87,9 @@
   <ItemGroup>
     <ClInclude Include="kernel.cuh" />
     <ClInclude Include="models.cuh" />
+    <ClInclude Include="neural_network.cuh" />
+    <ClInclude Include="optimizers.cuh" />
+    <ClInclude Include="tests.cuh" />
     <ClInclude Include="variable.cuh" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
