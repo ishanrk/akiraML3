@@ -1,21 +1,24 @@
 #include <iostream>
 #include "tests.cuh"
 
-using namespace std;
-
-int main()
-{
-    cout << "=== AkiraML3 Test Suite ===" << std::endl;
-    cout << "Running non-neural network tests..." << std::endl;
-    cout << std::endl;
-    
+int main() {
+    std::cout << "=== AkiraML3 Test Suite ===" << std::endl;
+    std::cout << std::endl;
     try {
+        std::cout << "Phase 1: Unit tests (variable, kernel, optimizers, linear regression)..." << std::endl;
         runNonNeuralNetworkTests();
-        cout << "=== All Tests Complete ===" << endl;
+        std::cout << std::endl;
+        std::cout << "Phase 2: Neural network unit tests (regression, optimizers, classification)..." << std::endl;
+        testNeuralNetworkRegression();
+        testNeuralNetworkWithOptimizers();
+        testNeuralNetworkClassification();
+        std::cout << std::endl;
+        std::cout << "Phase 3: Validation suite (diverse samples, verbose logs, timings)..." << std::endl;
+        runValidationSuite();
+        std::cout << "=== All Tests Complete ===" << std::endl;
     } catch (const std::exception& e) {
-        cout << "Error running tests: " << e.what() << endl;
+        std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
-    
     return 0;
 }

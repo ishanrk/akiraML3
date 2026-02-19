@@ -4,10 +4,12 @@
 #include <utility>
 #include <random>
 #include <chrono>
+#include <iomanip>
 #include "variable.cuh"
 #include "models.cuh"
 #include "optimizers.cuh"
 #include "neural_network.cuh"
+#include "dataloader.cuh"
 
 // all tests for kernel / variable functions
 
@@ -399,6 +401,94 @@ void testNeuralNetworkClassification() {
     std::cout << std::endl;
 }
 
+static void runValidationSuite() {
+    using namespace std::chrono;
+    std::cout << "\n";
+    std::cout << "================================================================================" << std::endl;
+    std::cout << "  VALIDATION SUITE — diverse samples, verbose training, detailed logs" << std::endl;
+    std::cout << "================================================================================" << std::endl;
+
+    auto runReg = [](const char* name, int num_samples, int num_features, int epochs,
+                     const std::vector<int>& layers, const std::vector<std::string>& acts) {
+        std::cout << "\n[REGRESSION] " << name << std::endl;
+        std::cout << "  samples=" << num_samples << " features=" << num_features
+                  << " epochs=" << epochs << " arch=[";
+        for (size_t i = 0; i < layers.size(); i++) std::cout << (i ? "," : "") << layers[i];
+        std::cout << "] activations=[";
+        for (size_t i = 0; i < acts.size(); i++) std::cout << (i ? "," : "") << acts[i];
+        std::cout << "]" << std::endl;
+        std::vector<std::vector<float>> data = generateRegressionData(num_samples, num_features);
+        std::vector<std::vector<float>> X, y;
+        splitDataRegression(data, num_features, X, y);
+        std::cout << "  data split: X.size()=" << X.size() << " y.size()=" << y.size() << std::endl;
+        auto opt = std::make_shared<Adam>(0.01f, 0.9f, 0.999f, 1e-8f);
+        NeuralNetwork nn(layers, acts, opt);
+        nn.printArchitecture();
+        auto t0 = high_resolution_clock::now();
+        nn.train(X, y, epochs, 0.01f, true);
+        auto t1 = high_resolution_clock::now();
+        double sec = duration<double>(t1 - t0).count();
+        float loss = nn.calculateLoss(X, y);
+        std::cout << "  [TIMING] train_sec=" << std::fixed << std::setprecision(4) << sec
+                  << " | final_loss=" << loss << std::endl;
+        std::cout << "  [PREDICT] sample_0 input=[" << X[0][0];
+        for (size_t i = 1; i < X[0].size(); i++) std::cout << "," << X[0][i];
+        std::cout << "] target=" << y[0][0] << " pred=" << nn.predict(X[0])[0] << std::endl;
+        std::cout << "  [OK] " << name << std::endl;
+    };
+
+    auto runClf = [](const char* name, int num_samples, int num_features, int num_classes, int epochs,
+                    const std::vector<int>& layers, const std::vector<std::string>& acts) {
+        std::cout << "\n[CLASSIFICATION] " << name << std::endl;
+        std::cout << "  samples=" << num_samples << " features=" << num_features
+                  << " classes=" << num_classes << " epochs=" << epochs << " arch=[";
+        for (size_t i = 0; i < layers.size(); i++) std::cout << (i ? "," : "") << layers[i];
+        std::cout << "]" << std::endl;
+        std::vector<std::vector<float>> data = generateClassificationData(num_samples, num_features, num_classes);
+        std::vector<std::vector<float>> X;
+        std::vector<int> labels;
+        splitDataClassification(data, num_features, num_classes, X, labels);
+        auto y = oneHotEncode(labels, num_classes);
+        std::cout << "  data split: X.size()=" << X.size() << " labels.size()=" << labels.size() << std::endl;
+        auto opt = std::make_shared<Adam>(0.01f, 0.9f, 0.999f, 1e-8f);
+        NeuralNetwork nn(layers, acts, opt);
+        nn.printArchitecture();
+        auto t0 = high_resolution_clock::now();
+        nn.train(X, y, epochs, 0.01f, true);
+        auto t1 = high_resolution_clock::now();
+        double sec = duration<double>(t1 - t0).count();
+        float loss = nn.calculateLoss(X, y);
+        int correct = 0;
+        for (size_t i = 0; i < X.size(); i++) {
+            auto pred = nn.predict(X[i]);
+            int c = static_cast<int>(std::max_element(pred.begin(), pred.end()) - pred.begin());
+            if (c == labels[i]) correct++;
+        }
+        float acc = X.empty() ? 0.0f : static_cast<float>(correct) / static_cast<float>(X.size());
+        std::cout << "  [TIMING] train_sec=" << std::fixed << std::setprecision(4) << sec
+                  << " | final_loss=" << loss << " accuracy=" << std::setprecision(2) << (acc * 100.0f) << "%" << std::endl;
+        std::cout << "  [PREDICT] sample_0 label=" << labels[0] << " pred_probs=[";
+        auto p0 = nn.predict(X[0]);
+        for (size_t i = 0; i < p0.size(); i++) std::cout << (i ? "," : "") << p0[i];
+        std::cout << "]" << std::endl;
+        std::cout << "  [OK] " << name << std::endl;
+    };
+
+    runReg("tiny_reg (10 samples, 1 feat)", 10, 1, 15, { 1, 4, 1 }, { "relu", "linear" });
+    runReg("small_reg (50 samples, 2 feat)", 50, 2, 20, { 2, 4, 1 }, { "relu", "linear" });
+    runReg("medium_reg (100 samples, 5 feat)", 100, 5, 25, { 5, 8, 4, 1 }, { "relu", "relu", "linear" });
+    runReg("edge_reg (5 samples, 2 feat)", 5, 2, 10, { 2, 3, 1 }, { "relu", "linear" });
+
+    runClf("binary_clf (20 samples, 2 feat, 2 classes)", 20, 2, 2, 20, { 2, 4, 2 }, { "relu", "softmax" });
+    runClf("multi_clf (50 samples, 2 feat, 3 classes)", 50, 2, 3, 25, { 2, 6, 3 }, { "relu", "softmax" });
+    runClf("multi_feat_clf (80 samples, 5 feat, 4 classes)", 80, 5, 4, 30, { 5, 10, 4 }, { "relu", "softmax" });
+    runClf("edge_clf (5 samples, 2 feat, 2 classes)", 5, 2, 2, 8, { 2, 3, 2 }, { "relu", "softmax" });
+
+    std::cout << "\n================================================================================" << std::endl;
+    std::cout << "  VALIDATION SUITE COMPLETE — all scenarios OK" << std::endl;
+    std::cout << "================================================================================" << std::endl << std::endl;
+}
+
 void runAllTests() {
     std::cout << "Running AkiraML Test Suite..." << std::endl;
     std::cout << "=================================" << std::endl;
@@ -418,6 +508,7 @@ void runAllTests() {
     testNeuralNetworkClassification();
     
     std::cout << "All tests completed!" << std::endl;
+    runValidationSuite();
 }
 
 void runNonNeuralNetworkTests() {

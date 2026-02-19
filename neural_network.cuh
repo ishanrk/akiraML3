@@ -3,6 +3,9 @@
 #include "optimizers.cuh"
 #include <vector>
 #include <string>
+#include <cstdint>
+
+enum class Act : uint8_t { Linear, Relu, Sigmoid, Softmax };
 
 class NeuralNetwork {
 private:
@@ -10,10 +13,10 @@ private:
     std::vector<variable> weights;
     std::vector<variable> biases;
     std::vector<std::string> activations;
+    std::vector<Act> act_type_;
     std::shared_ptr<Optimizer> optimizer;
     int num_layers;
-    
-    // Helper functions
+
     void initializeWeights();
     void initializeBiases();
     variable forwardPass(const variable& input);
@@ -29,7 +32,7 @@ public:
     
     // Training and prediction
     void train(const std::vector<std::vector<float>>& X, const std::vector<std::vector<float>>& y, 
-               int epochs, float learning_rate = 0.001f);
+               int epochs, float learning_rate = 0.001f, bool verbose = true);
     std::vector<float> predict(const std::vector<float>& input);
     std::vector<std::vector<float>> predictBatch(const std::vector<std::vector<float>>& inputs);
     
@@ -39,7 +42,9 @@ public:
     // Utility functions
     void printArchitecture();
     void setOptimizer(std::shared_ptr<Optimizer> opt);
-    
+    void save(const std::string& path) const;
+    static NeuralNetwork load(const std::string& path);
+
     // Getters
     std::vector<int> getLayerSizes() const { return layer_sizes; }
     int getNumLayers() const { return num_layers; }

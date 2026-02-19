@@ -1,6 +1,7 @@
 #pragma once
 #include "variable.cuh"
 #include "kernel.cuh"
+#include <cstring>
 
 // Base optimizer class
 class Optimizer {
@@ -32,14 +33,10 @@ public:
     
     void initialize(int size) {
         param_size = size;
-        m = (float*)malloc(size * sizeof(float));
-        v = (float*)malloc(size * sizeof(float));
-        
-        // Initialize moments to zero
-        for (int i = 0; i < size; i++) {
-            m[i] = 0.0f;
-            v[i] = 0.0f;
-        }
+        m = (float*)malloc(static_cast<size_t>(size) * sizeof(float));
+        v = (float*)malloc(static_cast<size_t>(size) * sizeof(float));
+        std::memset(m, 0, static_cast<size_t>(size) * sizeof(float));
+        std::memset(v, 0, static_cast<size_t>(size) * sizeof(float));
     }
     
     void update(variable& param, float* gradients, int iteration) override {
@@ -71,12 +68,8 @@ public:
     
     void initialize(int size) {
         param_size = size;
-        v = (float*)malloc(size * sizeof(float));
-        
-        // Initialize squared gradients to zero
-        for (int i = 0; i < size; i++) {
-            v[i] = 0.0f;
-        }
+        v = (float*)malloc(static_cast<size_t>(size) * sizeof(float));
+        std::memset(v, 0, static_cast<size_t>(size) * sizeof(float));
     }
     
     void update(variable& param, float* gradients, int iteration) override {

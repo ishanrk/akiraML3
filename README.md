@@ -1,377 +1,525 @@
-# AkiraML Library
+# AkiraML
 
-AkiraML is a CUDA-based C++ library designed for building and training machine learning models with support for custom variables, backpropagation, activation functions, and basic operations like matrix multiplication and element-wise operations. This library is an early prototype and currently supports core features needed for defining and manipulating tensors (variables) and performing basic operations.
+CUDA C++ library for building and training ML models. Autodiff, variables, optimizers, MLP, transformer encoder.
 
-## Features
-- **Auto-Differentiation Engine**: Implements reverse-mode automatic differentiation with computational graph construction, chain rule gradient computation, and Jacobian matrix calculations for vector-valued functions.
-- **Neural Network Framework**: Complete multi-layer perceptron implementation supporting both regression and classification tasks with configurable architectures, batch processing, and one-hot encoding utilities.
-- **Advanced Optimizers**: Three CUDA-accelerated optimization algorithms (Adam, RMSprop, SGD) with adaptive learning rates, momentum, and second-order moment estimation for efficient parameter updates.
-- **CUDA-Accelerated Operations**: 15+ parallel GPU kernels for matrix-vector multiplication, element-wise operations, activation functions (ReLU, Sigmoid, Softmax), gradient computations, and matrix transposition.
-- **Tensor Operations**: Comprehensive variable class supporting addition, dot product, matrix-vector and matrix-matrix multiplication, scaling, transpose, row-wise softmax, and seamless integration with computational graphs for automatic backpropagation.
-- **Transformers**: Transformer encoder with scaled dot-product attention, sinusoidal positional encoding, multi-head self-attention (configurable heads), and feed-forward layers with residual connections; all differentiable and CUDA-backed.
-- **Comprehensive Testing**: 13+ test cases covering vector operations, activation functions, loss calculations, linear regression models, neural network training, and optimizer performance comparisons with synthetic data generation.
+Dependencies: CUDA, C++ standard library.
 
-## Dependencies
-1. **CUDA**: Required for GPU computations.
-2. **C++ Standard Libraries**: For vector and I/O operations.
+## Files
 
-## Files and Structure
-- **`variable.h`**: Contains the `variable` class, defining the core data structure for storing and manipulating tensors.
-- **`kernel.cuh`**: Defines CUDA kernels and CUDA-based utility functions for matrix operations, activation functions, etc.
-- **`models.cuh`** / **`models.cu`**: Basic machine learning models (e.g. scalar linear regression with SGD, Adam, RMSprop).
-- **`transformers.cuh`** / **`transformers.cu`**: Transformer encoder: scaled dot-product attention, positional encoding, `TransformerEncoderLayer`, and `TransformerEncoder`.
+`variable.cuh` / `variable.cu` — tensor class and ops.  
+`kernel.cuh` / `kernel.cu` — CUDA kernels.  
+`optimizers.cuh` — Adam, RMSprop, SGD.  
+`neural_network.cuh` / `neural_network.cu` — MLP.  
+`models.cuh` / `models.cu` — linear regression.  
+`transformers.cuh` / `transformers.cu` — transformer encoder.  
+`dataloader.cuh` / `dataloader.cu` — load CSV, builtin Iris/Wine, normalize.  
+`benchmark.cu` — benchmark suite (training speed / accuracy).
 
-## Getting Started
+## Dataloader
 
-### Step 1: Initialize a Variable
+Load CSV, split features and target, normalize.
+
 ```cpp
-#include "variable.h"
+#include "dataloader.cuh"
 
-int main() {
-    // Create a variable with dimensions (2, 2) and random initialization
-    variable var(2, 2, true);
-    var.print(true); // Print the variable as a matrix
-    return 0;
-}
+std::vector<std::vector<float>> data = loadCSV("data.csv");
+std::vector<std::vector<float>> X, y;
+splitDataRegression(data, num_features, X, y);
+
+std::vector<int> labels;
+splitDataClassification(data, num_features, num_classes, X, labels);
+normalizeFeaturesMinMax(X);
 ```
 
-### Step 2: Perform Matrix-Vector Multiplication
+Builtin datasets: Iris (150, 4, 3 classes), Wine (178, 13, 3 classes).
+
 ```cpp
+auto [X, labels] = loadBuiltinIris();
+auto [X2, labels2] = loadBuiltinWine();
+normalizeFeaturesMinMax(X);
+```
 
-variable mat(3, 3, true);   // Random 3x3 matrix
-variable vec(3, 1, true);   // Random 3x1 vector
+## MNIST / Fashion-MNIST
 
-// Perform matrix-vector multiplication
+1. **Download data (Python, one-time):**  
+   `pip install torch torchvision`  
+   `python scripts/download_mnist.py`  
+   Creates `data/mnist_train.csv`, `data/mnist_test.csv`, `data/fashion_mnist_*.csv` (785 cols: 784 pixels + label).
+
+2. **Build and train (C++):**  
+   `nvcc -std=c++17 -O2 -o build/train_mnist train_mnist.cu neural_network.cu variable.cu kernel.cu dataloader.cu`  
+   `build/train_mnist` — MNIST, 10 epochs.  
+   `build/train_mnist --fashion` — Fashion-MNIST.  
+   `build/train_mnist --epochs 20 --save data/my_mlp.akira`
+
+The MLP is 784 → 256 → 128 → 10 (ReLU, ReLU, Softmax) with Adam.
+
+## Tests and validation
+
+Fast functional tests and a verbose validation suite live in `tests.cu` / `test.cu`.
+
+- **Non–NN tests only** (variables, kernels, optimizers, linear regression):
+  - `nvcc -std=c++17 -O2 -o build/run_tests test.cu tests.cu variable.cu kernel.cu models.cu dataloader.cu`
+  - `build/run_tests`
+- **Full suite + validation (diverse regression / classification with lots of logs)**:
+  - same command as above; `test.cu` runs:
+    - `runNonNeuralNetworkTests()` (low‑level ops)
+    - neural‑network regression / classification unit tests
+    - `runValidationSuite()` (small/medium/edge datasets, verbose epoch‑by‑epoch loss and timings)
+
+## Benchmark
+
+`benchmark.cu` runs **synthetic regression / classification** and **UCI Iris/Wine** benchmarks and writes a CSV line per run.
+
+- **Build and run:**
+  - `nvcc -std=c++17 -O2 -o build/benchmark benchmark.cu neural_network.cu variable.cu kernel.cu models.cu dataloader.cu`
+  - `build/benchmark`
+- **Output:**
+  - Prints a CSV header and rows to stdout
+  - Writes `benchmark_results.csv` with columns  
+    `engine,dataset,model,samples,features,epochs,train_sec,epoch_ms,samples_per_sec,final_loss,accuracy`  
+    where `engine` is `akiraML3` by default.
+- **Graphs (time, speed, accuracy):**
+  - `pip install -r scripts/requirements.txt`
+  - `python scripts/plot_benchmarks.py benchmark_results.csv -o benchmarks/plots`
+  - See `benchmarks/README.md` for how to add results from other C++ autodiff engines
+    (e.g. LibTorch, `autodiff`, Eigen‑based engines) using the same CSV schema.
+
+## Variable
+
+Create a variable: (rows, cols, random). Print as matrix or vector.
+
+```cpp
+#include "variable.cuh"
+
+variable var(2, 2, true);
+var.print(true);
+```
+
+Matrix-vector multiply.
+
+```cpp
+variable mat(3, 3, true);
+variable vec(3, 1, true);
 variable result = mat.matrixMulVec(vec);
 result.print();
 ```
-### Step 3: Use Activation Functions
 
-```
-variable input(3, 1, true);
+Matrix-matrix multiply.
 
-// Apply ReLU activation
-variable relu_output = input.relu();
-relu_output.print();
+```cpp
+variable A(4, 3, true);
+variable B(3, 5, true);
+variable C = A.matrixMul(B);
+C.print(true);
+```
 
-// Apply Sigmoid activation
-variable sigmoid_output = input.sigmoid();
-sigmoid_output.print();
+Transpose, scale, element-wise add.
 
+```cpp
+variable x(2, 3, false);
+x.setData(some_data);
+variable xt = x.transpose();
+variable scaled = x.scale(0.5f);
+variable y(2, 3, false);
+y.setData(other_data);
+variable z = x + y;
 ```
-### Step 4: Calculate Loss with RMSE
-```
-variable predicted(3, 1, true);
-variable actual(3, 1, true);
 
-// Calculate RMSE loss
-variable loss = predicted.RMSELOSS(actual);
-loss.print();
+Activations: relu, sigmoid, softmax, rowSoftmax.
+
+```cpp
+variable in(4, 1, true);
+variable a = in.relu();
+variable b = in.sigmoid();
+variable c = in.softmax();
+
+variable mat(3, 4, true);
+variable row_soft = mat.rowSoftmax();
 ```
-### Step 5: Run a Simple Linear Regression Model
-A linear regression example with CUDA-based optimizations is provided in the main.cpp file.
+
+RMSE loss and backward.
+
+```cpp
+variable pred(5, 1, false);
+variable target(5, 1, false);
+pred.setData(pred_data);
+target.setData(target_data);
+variable loss = pred.RMSELOSS(target);
+float* arr = nullptr;
+loss.backward(&loss, arr, 0);
 ```
-#include <iostream>
+
+## Linear regression
+
+SGD.
+
+```cpp
 #include "models.cuh"
 
-int main() {
-    int num_samples = 10;
-    float slope = 10000;      // Specify slope (m)
-    float intercept = -988;   // Specify intercept (c)
-    float noise_stddev = 0.00001; // Standard deviation of noise
-
-    // Generate the dataset
-    std::vector<std::pair<float, float>> dataset = generateLinearData(num_samples, slope, intercept, noise_stddev);
-
-    // Perform scalar linear regression
-    auto result = scalarLinearRegression(dataset, 0.001); // Learning rate = 0.001
-    std::cout << "Predicted slope: " << result.first << ", intercept: " << result.second << std::endl;
-
-    return 0;
-}
+std::vector<std::pair<float, float>> dataset = generateLinearData(100, 2.5f, 1.0f, 0.1f);
+auto result = scalarLinearRegression(dataset, 0.001f);
+std::cout << result.first << " " << result.second << std::endl;
 ```
-## Library Components
-### Class: variable
-Represents a tensor with dimensions (dim1, dim2) and supports operations like:
 
-- Addition: operator+
-- Matrix-Vector Multiplication: matrixMulVec
-- Matrix-Matrix Multiplication: matrixMul
-- Transpose: transpose
-- Activation Functions: relu, sigmoid, softmax, rowSoftmax (per-row softmax for attention)
-- Backpropagation: backward through constructed computational graph
-- RMSE Loss: RMSELOSS
-- Scaling: scale
-  
-### CUDA Kernels (kernel.cuh)
-- Defines GPU kernels for various operations:
-- vectorAddUM: Performs element-wise addition.
-- multiplyVectorsKernel: Multiplies vectors element-wise.
-- matrixVectorMulKernel: Multiplies a matrix with a vector.
-- sigmoidKernel: Applies the sigmoid function.
-- reluKernel: Applies the ReLU function.
-- softmaxKernel: Applies the softmax function.
-  
-## Example CUDA Kernel Usage
-The library uses CUDA kernels to perform operations in parallel. For example, the matrixVectorMulKernel kernel multiplies a matrix with a vector:
-```
-__global__ void matrixVectorMulKernel(float* A, float* x, float* y, int M, int N) {
-    int row = blockIdx.x * blockDim.x + threadIdx.x;
-    if (row < M) {
-        float dot_product = 0;
-        for (int col = 0; col < N; ++col) {
-            dot_product += A[row * N + col] * x[col];
-        }
-        y[row] = dot_product;
-    }
-}
-```
-## Advanced Examples
+Adam.
 
-### RMSprop Optimizer Example
 ```cpp
-#include <iostream>
 #include "models.cuh"
 #include "optimizers.cuh"
 
-int main() {
-    // Generate synthetic linear data
-    int num_samples = 100;
-    float slope = 2.5f;
-    float intercept = 1.0f;
-    float noise_stddev = 0.1f;
-    
-    std::vector<std::pair<float, float>> dataset = generateLinearData(num_samples, slope, intercept, noise_stddev);
-    
-    // Train using RMSprop optimizer
-    std::pair<float, float> result = scalarLinearRegressionRMSprop(dataset, 0.01f);
-    
-    std::cout << "True slope: " << slope << ", intercept: " << intercept << std::endl;
-    std::cout << "Predicted slope: " << result.first << ", intercept: " << result.second << std::endl;
-    
-    return 0;
-}
+auto dataset = generateLinearData(100, 2.5f, 1.0f, 0.1f);
+auto result = scalarLinearRegressionAdam(dataset, 0.01f);
+std::cout << result.first << " " << result.second << std::endl;
 ```
 
-### Neural Network Example
+RMSprop.
+
 ```cpp
-#include <iostream>
+#include "models.cuh"
+#include "optimizers.cuh"
+
+auto dataset = generateLinearData(100, 2.5f, 1.0f, 0.1f);
+auto result = scalarLinearRegressionRMSprop(dataset, 0.01f);
+std::cout << result.first << " " << result.second << std::endl;
+```
+
+## Neural network regression
+
+```cpp
 #include "neural_network.cuh"
 #include "optimizers.cuh"
 
-int main() {
-    // Generate regression data
-    auto data = generateRegressionData(200, 2);  // 200 samples, 2 features
-    
-    // Separate features and targets
-    std::vector<std::vector<float>> X;
-    std::vector<std::vector<float>> y;
-    
-    for (const auto& sample : data) {
-        X.push_back({sample[0], sample[1]});  // Features
-        y.push_back({sample[2]});             // Target
-    }
-    
-    // Create neural network: 2 inputs -> 8 hidden -> 4 hidden -> 1 output
-    std::vector<int> layer_sizes = {2, 8, 4, 1};
-    std::vector<std::string> activations = {"relu", "relu", "linear"};
-    
-    // Use Adam optimizer
-    auto adam_opt = std::make_shared<Adam>(0.01f, 0.9f, 0.999f, 1e-8f);
-    NeuralNetwork nn(layer_sizes, activations, adam_opt);
-    
-    // Print network architecture
-    nn.printArchitecture();
-    
-    // Train the network
-    nn.train(X, y, 100, 0.01f);
-    
-    // Make predictions
-    std::vector<float> test_input = {1.0f, 0.5f};
-    auto prediction = nn.predict(test_input);
-    
-    std::cout << "Test input: [" << test_input[0] << ", " << test_input[1] << "]" << std::endl;
-    std::cout << "Prediction: " << prediction[0] << std::endl;
-    
-    return 0;
+auto data = generateRegressionData(200, 2);
+std::vector<std::vector<float>> X, y;
+for (const auto& s : data) {
+    X.push_back({s[0], s[1]});
+    y.push_back({s[2]});
 }
+
+std::vector<int> sizes = {2, 8, 4, 1};
+std::vector<std::string> acts = {"relu", "relu", "linear"};
+auto opt = std::make_shared<Adam>(0.01f, 0.9f, 0.999f, 1e-8f);
+NeuralNetwork nn(sizes, acts, opt);
+nn.printArchitecture();
+nn.train(X, y, 100, 0.01f);
+
+std::vector<float> test = {1.0f, 0.5f};
+auto out = nn.predict(test);
+std::cout << out[0] << std::endl;
 ```
 
-### Transformer Encoder Example
+## Neural network classification
+
 ```cpp
-#include <iostream>
+#include "neural_network.cuh"
+#include "optimizers.cuh"
+#include <algorithm>
+
+auto data = generateClassificationData(150, 2, 3);
+std::vector<std::vector<float>> X;
+std::vector<int> labels;
+for (const auto& s : data) {
+    X.push_back({s[0], s[1]});
+    labels.push_back(static_cast<int>(s[2]));
+}
+auto y = oneHotEncode(labels, 3);
+
+std::vector<int> sizes = {2, 6, 3};
+std::vector<std::string> acts = {"relu", "softmax"};
+auto opt = std::make_shared<RMSprop>(0.01f, 0.9f, 1e-8f);
+NeuralNetwork nn(sizes, acts, opt);
+nn.train(X, y, 200, 0.01f);
+
+std::vector<float> test = {1.0f, 0.5f};
+auto pred = nn.predict(test);
+int cls = std::max_element(pred.begin(), pred.end()) - pred.begin();
+std::cout << cls << std::endl;
+```
+
+## Transformer encoder
+
+```cpp
 #include "transformers.cuh"
 #include "optimizers.cuh"
 
-int main() {
-    int seq_len = 8;   // Sequence length
-    int d_model = 64;  // Model dimension
-    int num_heads = 4;
-    int d_ff = 256;    // Feed-forward hidden dimension
-    int num_layers = 2;
+int seq_len = 8;
+int d_model = 64;
+int num_heads = 4;
+int d_ff = 256;
+int num_layers = 2;
 
-    auto opt = std::make_shared<Adam>(0.0001f, 0.9f, 0.999f, 1e-8f);
-    TransformerEncoder encoder(seq_len, d_model, num_heads, d_ff, num_layers, opt);
+auto opt = std::make_shared<Adam>(0.0001f, 0.9f, 0.999f, 1e-8f);
+TransformerEncoder encoder(seq_len, d_model, num_heads, d_ff, num_layers, opt);
 
-    variable input(seq_len, d_model, false);
-    // ... set input.data for your sequence embeddings ...
+variable input(seq_len, d_model, false);
+// set input.data to your embeddings
 
-    variable output = encoder.forward(input);
-    // output has shape (seq_len, d_model); use with a loss and backward() for training
-    return 0;
-}
+variable output = encoder.forward(input);
 ```
 
-### Classification Neural Network Example
+## Save and load
+
+Models use the `.akira` text format. One number per line for floats and ints. Keywords on their own line.
+
+Save and load MLP.
+
 ```cpp
-#include <iostream>
 #include "neural_network.cuh"
-#include "optimizers.cuh"
 
-int main() {
-    // Generate classification data
-    auto data = generateClassificationData(150, 2, 3);  // 150 samples, 2 features, 3 classes
-    
-    // Separate features and labels
-    std::vector<std::vector<float>> X;
-    std::vector<int> labels;
-    
-    for (const auto& sample : data) {
-        X.push_back({sample[0], sample[1]});  // Features
-        labels.push_back(static_cast<int>(sample[2]));  // Class labels
-    }
-    
-    // One-hot encode labels
-    auto y = oneHotEncode(labels, 3);
-    
-    // Create neural network: 2 inputs -> 6 hidden -> 3 outputs
-    std::vector<int> layer_sizes = {2, 6, 3};
-    std::vector<std::string> activations = {"relu", "softmax"};
-    
-    // Use RMSprop optimizer
-    auto rmsprop_opt = std::make_shared<RMSprop>(0.01f, 0.9f, 1e-8f);
-    NeuralNetwork nn(layer_sizes, activations, rmsprop_opt);
-    
-    // Train the network
-    nn.train(X, y, 200, 0.01f);
-    
-    // Make predictions
-    std::vector<float> test_input = {1.0f, 0.5f};
-    auto prediction = nn.predict(test_input);
-    
-    std::cout << "Test input: [" << test_input[0] << ", " << test_input[1] << "]" << std::endl;
-    std::cout << "Class probabilities: [" << prediction[0] << ", " << prediction[1] << ", " << prediction[2] << "]" << std::endl;
-    
-    // Find predicted class
-    int predicted_class = std::max_element(prediction.begin(), prediction.end()) - prediction.begin();
-    std::cout << "Predicted class: " << predicted_class << std::endl;
-    
-    return 0;
+NeuralNetwork nn(sizes, acts, opt);
+nn.train(X, y, 100, 0.01f);
+nn.save("model.akira");
+
+NeuralNetwork loaded = NeuralNetwork::load("model.akira");
+std::vector<float> out = loaded.predict(test);
+```
+
+Save and load transformer.
+
+```cpp
+#include "transformers.cuh"
+
+TransformerEncoder enc(8, 64, 4, 256, 2, opt);
+enc.save("transformer.akira");
+
+TransformerEncoder loaded = TransformerEncoder::load("transformer.akira");
+variable out = loaded.forward(input);
+```
+
+## .akira format
+
+File is UTF-8 text. Read line by line or token by token. First line is model type.
+
+MLP file layout:
+
+```
+MLP
+LAYERS
+<num_layers>
+<layer_sizes[0]>
+<layer_sizes[1]>
+...
+ACTIVATIONS
+<num_activations>
+<act0>
+<act1>
+...
+WEIGHT
+<layer_index>
+<rows> <cols>
+<float> (rows*cols lines)
+WEIGHT
+...
+BIAS
+<layer_index>
+<dim>
+<float> (dim lines)
+...
+END
+```
+
+Example: 2 inputs, 4 hidden, 1 output, activations relu and linear.
+
+```
+MLP
+LAYERS
+3
+2
+4
+1
+ACTIVATIONS
+2
+relu
+linear
+WEIGHT
+0
+4 2
+<float x8>
+WEIGHT
+1
+1 4
+<float x4>
+BIAS
+0
+4
+<float x4>
+BIAS
+1
+1
+<float x1>
+END
+```
+
+Transformer file layout:
+
+```
+TRANSFORMER
+MAX_LEN
+<max_len>
+D_MODEL
+<d_model>
+NUM_HEADS
+<num_heads>
+D_FF
+<d_ff>
+NUM_LAYERS
+<num_layers>
+LAYER
+<layer_index>
+WQ
+<rows> <cols>
+<float> (rows*cols lines)
+WK
+...
+WV
+...
+WO
+...
+WFF1
+...
+BFF1
+...
+WFF2
+...
+BFF2
+...
+LAYER
+...
+PE
+<max_len> <d_model>
+<float> (max_len*d_model lines)
+END
+```
+
+Weights are row-major. WQ, WK, WV, WO are (d_model, d_model). WFF1 (d_model, d_ff). BFF1 (seq_len, d_ff). WFF2 (d_ff, d_model). BFF2 (seq_len, d_model).
+
+Define a model in code, train or set weights, then save to a path. Load from path returns a new model with the same layout and filled weights. Optimizer is not stored; set it after load if you will train.
+
+```cpp
+NeuralNetwork nn = NeuralNetwork::load("model.akira");
+nn.setOptimizer(std::make_shared<Adam>(0.001f, 0.9f, 0.999f, 1e-8f));
+nn.train(X, y, 10, 0.001f);
+nn.save("model.akira");
+```
+
+Scaled dot-product attention only (Q, K, V variables).
+
+```cpp
+#include "transformers.cuh"
+
+variable Q(seq_len, d_k, false);
+variable K(seq_len, d_k, false);
+variable V(seq_len, d_v, false);
+// set Q.data, K.data, V.data
+variable attn_out = scaledDotProductAttention(Q, K, V);
+```
+
+Positional encoding buffer (no learnable params).
+
+```cpp
+float* pe = (float*)malloc(max_len * d_model * sizeof(float));
+sinusoidalPositionalEncoding(pe, max_len, d_model);
+// add pe to input embeddings, then free(pe)
+```
+
+## Backward and optimizers
+
+Run backward from loss, then update parameters with optimizer.
+
+```cpp
+variable loss = model_output.RMSELOSS(target);
+float* arr = nullptr;
+loss.backward(&loss, arr, 0);
+
+for (auto& w : weights) {
+    w.updateWithOptimizer(iteration);
 }
 ```
 
-## Autodifferentiation Engine
-
-### How AkiraML's Autodifferentiation Works
-
-AkiraML implements a **reverse-mode automatic differentiation** engine that builds computational graphs during forward passes and computes gradients during backward passes. Here's how it works:
-
-#### 1. Computational Graph Construction
-Every operation in AkiraML creates a new `variable` object that maintains:
-- **Data**: The computed values
-- **Children**: References to input variables
-- **Parents**: References to output variables  
-- **Gradients**: Pre-computed gradient information for each child
+Set optimizer on a variable.
 
 ```cpp
-// Example: z = x + y creates a computational graph
+auto adam = std::make_shared<Adam>(0.001f, 0.9f, 0.999f, 1e-8f);
+weight.setOptimizer(adam);
+```
+
+## Computational graph
+
+Operations build a graph. Backward propagates gradients from root to leaves.
+
+```cpp
 variable x(2, 1, false);
 variable y(2, 1, false);
-variable z = x + y;  // Creates graph: x -> z <- y
-```
-
-#### 2. Gradient Storage
-Each operation pre-computes and stores the gradients with respect to its inputs:
-
-```cpp
-// In addition operation (x + y):
-// gradientChild1 = [1, 1, 1, ...] (gradient w.r.t. x)
-// gradientChild2 = [1, 1, 1, ...] (gradient w.r.t. y)
-```
-
-#### 3. Backward Pass
-The `backward()` method traverses the computational graph in reverse order:
-
-```cpp
-// Start from loss and propagate gradients backward
+x.setData(x_data);
+y.setData(y_data);
+variable z = x + y;
+variable out = z.relu();
+variable loss = out.RMSELOSS(target);
 loss.backward(&loss, nullptr, 0);
+// x.backwardGrad, y.backwardGrad filled
 ```
 
-The backward pass:
-1. **Initializes** the root gradient to 1.0
-2. **Traverses** the graph from children to parents
-3. **Accumulates** gradients using the chain rule
-4. **Stores** final gradients in `backwardGrad` for each variable
+## Kernel usage
 
-#### 4. Chain Rule Implementation
-For each operation, gradients are computed using the chain rule:
+Matrix-vector multiply on device.
 
 ```cpp
-// If z = f(x, y) and we have ∂L/∂z, then:
-// ∂L/∂x = ∂L/∂z * ∂z/∂x
-// ∂L/∂y = ∂L/∂z * ∂z/∂y
+void matrixVectorMul(float* A, float* x, float* y, int M, int N);
 ```
 
-### Jacobians in AkiraML
-
-AkiraML computes **Jacobian matrices** for vector-valued functions, particularly for activation functions:
-
-#### 1. Element-wise Operations
-For element-wise operations like ReLU and Sigmoid, the Jacobian is diagonal:
+Matrix-matrix multiply.
 
 ```cpp
-// ReLU: J[i,i] = 1 if x[i] > 0, else 0
-// Sigmoid: J[i,i] = σ(x[i]) * (1 - σ(x[i]))
+void matrixMatrixMul(float* A, float* B, float* C, int M, int K, int N);
 ```
 
-#### 2. Softmax Jacobian
-Softmax computes the full Jacobian matrix since each output depends on all inputs:
+Row-wise softmax (e.g. for attention weights).
 
 ```cpp
-// Softmax Jacobian: J[i,j] = σ(x[i]) * (δ[i,j] - σ(x[j]))
-// where δ[i,j] is the Kronecker delta
+void rowSoftmax(float* input, float* output, int rows, int cols);
 ```
 
-#### 3. Matrix Operations
-For matrix-vector multiplication `y = Ax`, the Jacobian is:
-- **w.r.t. A**: `x^T` (transposed input vector)
-- **w.r.t. x**: `A^T` (transposed weight matrix)
+Transpose.
 
-### Key Features of AkiraML's Autodiff
-
-1. **CUDA Acceleration**: All gradient computations run on GPU for performance
-2. **Memory Efficient**: Gradients are computed on-demand during backward pass
-3. **Extensible**: New operations can be added by implementing forward/backward functions
-4. **Optimizer Integration**: Gradients are automatically used by optimizers (Adam, RMSprop, SGD)
-
-### Example: Custom Operation with Autodiff
 ```cpp
-// To add a new operation, you need to:
-// 1. Implement forward computation
-// 2. Pre-compute gradients w.r.t. inputs
-// 3. Store gradients in gradientChild1, gradientChild2, etc.
+void transposeMatrixCPU(float* input, float* output, int rows, int cols);
+```
 
-variable customOperation(variable& input) {
-    // Forward pass
-    variable result = /* compute result */;
-    
-    // Pre-compute gradients (example: square operation)
-    // gradient = 2 * input (derivative of x² is 2x)
-    for (int i = 0; i < input.dim1 * input.dim2; i++) {
-        result.gradientChild1[i] = 2.0f * input.data[i];
+Element-wise multiply.
+
+```cpp
+void elementwiseMultiply(float* x, float* y, float* result, int N);
+```
+
+## Adding a custom op
+
+Implement forward, store gradients for each input in result.gradientChild1 (and gradientChild2 for binary ops), push parents so backward can traverse.
+
+```cpp
+variable myOp(variable& a) {
+    std::vector<variable*> temp = {&a};
+    variable result(a.dim1, a.dim2, false, temp);
+    result.data = (float*)malloc(a.dim1 * a.dim2 * sizeof(float));
+    result.gradientChild1 = (float*)malloc(a.dim1 * a.dim2 * sizeof(float));
+    for (int i = 0; i < a.dim1 * a.dim2; i++) {
+        result.data[i] = a.data[i] * a.data[i];
+        result.gradientChild1[i] = 2.0f * a.data[i];
     }
-    
+    a.parents.push_back(result);
     return result;
 }
 ```
 
+Add a branch in variable::backward that detects this op (e.g. by dimensions or a sentinel) and computes backwardGrad from gradAccum and the stored gradients.
+
+## Performance
+
+The benchmark suite covers:
+
+- **Regression sweeps:** synthetic `reg_n{100,250,500,1000,2000,5000}` with 10 features and MLP `[10,16,8,1]`
+- **Classification sweeps:** synthetic `clf_n{200,500,1000,2000}` with 5 features, 3 classes and MLP `[5,8,3]`
+- **UCI datasets:** Iris (`[4,8,3]`) and Wine (`[13,16,3]`)
+
+For each run it reports: **`train_sec`**, **`epoch_ms`**, **`samples_per_sec`**, **`final_loss`**, and (for classification) **`accuracy`**.  
+Use `scripts/plot_benchmarks.py` to generate comparison graphs for `akiraML3` and any other C++ autodiff engines that emit the same CSV format (see `benchmarks/README.md`).

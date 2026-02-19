@@ -154,31 +154,28 @@ __global__ void matrixVectorMulKernel(float* A, float* x, float* y, int M, int N
     }
 }
 void matrixVectorMul(float* A, float* x, float* y, int M, int N) {
-    float* d_A, * d_x, * d_y;
+    static thread_local int cached_M = 0, cached_N = 0;
+    static thread_local float* d_A = nullptr;
+    static thread_local float* d_x = nullptr;
+    static thread_local float* d_y = nullptr;
 
-    // Allocate memory on the device
-    cudaMalloc((void**)&d_A, M * N * sizeof(float));
-    cudaMalloc((void**)&d_x, N * sizeof(float));
-    cudaMalloc((void**)&d_y, M * sizeof(float));
+    if (cached_M != M || cached_N != N) {
+        if (d_A) { cudaFree(d_A); d_A = nullptr; }
+        if (d_x) { cudaFree(d_x); d_x = nullptr; }
+        if (d_y) { cudaFree(d_y); d_y = nullptr; }
+        cudaMalloc((void**)&d_A, M * N * sizeof(float));
+        cudaMalloc((void**)&d_x, N * sizeof(float));
+        cudaMalloc((void**)&d_y, M * sizeof(float));
+        cached_M = M;
+        cached_N = N;
+    }
 
-    // Copy data from host to device
     cudaMemcpy(d_A, A, M * N * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_x, x, N * sizeof(float), cudaMemcpyHostToDevice);
-
-    // Define grid and block sizes
-    int blockSize = 256;
-    int numBlocks = (M + blockSize - 1) / blockSize;
-
-    // Launch the kernel
+    const int blockSize = 256;
+    const int numBlocks = (M + blockSize - 1) / blockSize;
     matrixVectorMulKernel << <numBlocks, blockSize >> > (d_A, d_x, d_y, M, N);
-
-    // Copy the result back to host
     cudaMemcpy(y, d_y, M * sizeof(float), cudaMemcpyDeviceToHost);
-
-    // Free device memory
-    cudaFree(d_A);
-    cudaFree(d_x);
-    cudaFree(d_y);
 }
 
 

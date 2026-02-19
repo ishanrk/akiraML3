@@ -40,7 +40,11 @@ public:
 
     TransformerEncoder(int max_len, int d_model, int num_heads, int d_ff, int num_layers,
                       std::shared_ptr<Optimizer> opt = nullptr);
+    TransformerEncoder(const TransformerEncoder& other);
+    TransformerEncoder& operator=(const TransformerEncoder&) = delete;
     ~TransformerEncoder();
     variable forward(const variable& x);
     void setOptimizer(std::shared_ptr<Optimizer> opt);
+    void save(const std::string& path) const;
+    static TransformerEncoder load(const std::string& path);
 };

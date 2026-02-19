@@ -16,3 +16,4 @@ void testNeuralNetworkWithOptimizers();
 void testNeuralNetworkClassification();
 void runAllTests();
 void runNonNeuralNetworkTests();
+void runValidationSuite();

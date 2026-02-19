@@ -1,5 +1,7 @@
 #include "transformers.cuh"
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <random>
 #include <cmath>
 
@@ -98,6 +100,16 @@ TransformerEncoder::TransformerEncoder(int max_len_, int d_model_, int num_heads
     }
 }
 
+TransformerEncoder::TransformerEncoder(const TransformerEncoder& other)
+    : max_len(other.max_len), d_model(other.d_model) {
+    positional_encoding = (float*)malloc(max_len * d_model * sizeof(float));
+    for (int i = 0; i < max_len * d_model; i++) positional_encoding[i] = other.positional_encoding[i];
+    layers = other.layers;
+    for (size_t i = 0; i < layers.size(); i++) {
+        layers[i].optimizer = other.layers[i].optimizer;
+    }
+}
+
 TransformerEncoder::~TransformerEncoder() {
     free(positional_encoding);
 }
@@ -127,4 +139,71 @@ void TransformerEncoder::setOptimizer(std::shared_ptr<Optimizer> opt) {
         layers[i].W_ff2[0].setOptimizer(opt);
         layers[i].b_ff2[0].setOptimizer(opt);
     }
+}
+
+static void writeMat(std::ofstream& f, const variable& v) {
+    f << v.dim1 << " " << v.dim2 << "\n";
+    int n = v.dim1 * v.dim2;
+    for (int i = 0; i < n; i++) f << v.data[i] << "\n";
+}
+static void readMat(std::ifstream& f, variable& v) {
+    int rows, cols;
+    f >> rows >> cols;
+    int n = rows * cols;
+    for (int i = 0; i < n; i++) f >> v.data[i];
+}
+
+void TransformerEncoder::save(const std::string& path) const {
+    std::ofstream f(path);
+    if (!f) throw std::runtime_error("TransformerEncoder::save: cannot open " + path);
+    f << "TRANSFORMER\nMAX_LEN\n" << max_len << "\nD_MODEL\n" << d_model << "\nNUM_HEADS\n"
+      << layers[0].num_heads << "\nD_FF\n" << layers[0].d_ff << "\nNUM_LAYERS\n" << layers.size() << "\n";
+    for (size_t L = 0; L < layers.size(); L++) {
+        const auto& layer = layers[L];
+        f << "LAYER\n" << L << "\n";
+        f << "WQ\n"; writeMat(f, layer.W_q[0]);
+        f << "WK\n"; writeMat(f, layer.W_k[0]);
+        f << "WV\n"; writeMat(f, layer.W_v[0]);
+        f << "WO\n"; writeMat(f, layer.W_o[0]);
+        f << "WFF1\n"; writeMat(f, layer.W_ff1[0]);
+        f << "BFF1\n"; writeMat(f, layer.b_ff1[0]);
+        f << "WFF2\n"; writeMat(f, layer.W_ff2[0]);
+        f << "BFF2\n"; writeMat(f, layer.b_ff2[0]);
+    }
+    f << "PE\n" << max_len << " " << d_model << "\n";
+    for (int i = 0; i < max_len * d_model; i++) f << positional_encoding[i] << "\n";
+    f << "END\n";
+}
+
+TransformerEncoder TransformerEncoder::load(const std::string& path) {
+    std::ifstream f(path);
+    if (!f) throw std::runtime_error("TransformerEncoder::load: cannot open " + path);
+    std::string tag;
+    f >> tag;
+    if (tag != "TRANSFORMER") throw std::runtime_error("TransformerEncoder::load: expected TRANSFORMER");
+    int max_len_, d_model_, num_heads, d_ff, num_layers;
+    f >> tag >> max_len_ >> tag >> d_model_ >> tag >> num_heads >> tag >> d_ff >> tag >> num_layers;
+    TransformerEncoder enc(max_len_, d_model_, num_heads, d_ff, num_layers, nullptr);
+    for (int L = 0; L < num_layers; L++) {
+        f >> tag;
+        if (tag != "LAYER") throw std::runtime_error("TransformerEncoder::load: expected LAYER");
+        int idx;
+        f >> idx;
+        f >> tag; if (tag != "WQ") throw std::runtime_error("expected WQ"); readMat(f, enc.layers[L].W_q[0]);
+        f >> tag; if (tag != "WK") throw std::runtime_error("expected WK"); readMat(f, enc.layers[L].W_k[0]);
+        f >> tag; if (tag != "WV") throw std::runtime_error("expected WV"); readMat(f, enc.layers[L].W_v[0]);
+        f >> tag; if (tag != "WO") throw std::runtime_error("expected WO"); readMat(f, enc.layers[L].W_o[0]);
+        f >> tag; if (tag != "WFF1") throw std::runtime_error("expected WFF1"); readMat(f, enc.layers[L].W_ff1[0]);
+        f >> tag; if (tag != "BFF1") throw std::runtime_error("expected BFF1"); readMat(f, enc.layers[L].b_ff1[0]);
+        f >> tag; if (tag != "WFF2") throw std::runtime_error("expected WFF2"); readMat(f, enc.layers[L].W_ff2[0]);
+        f >> tag; if (tag != "BFF2") throw std::runtime_error("expected BFF2"); readMat(f, enc.layers[L].b_ff2[0]);
+    }
+    f >> tag;
+    if (tag != "PE") throw std::runtime_error("TransformerEncoder::load: expected PE");
+    int pe_rows, pe_cols;
+    f >> pe_rows >> pe_cols;
+    for (int i = 0; i < max_len_ * d_model_; i++) f >> enc.positional_encoding[i];
+    f >> tag;
+    if (tag != "END") throw std::runtime_error("TransformerEncoder::load: expected END");
+    return enc;
 }

@@ -1,5 +1,6 @@
 #include "variable.cuh"
 #include "optimizers.cuh"
+#include <cstring>
 
 variable::variable(int dimension1, int dimension2, bool random, std::vector<variable*>currChildren)
 {
@@ -21,15 +22,9 @@ variable::variable(int dimension1, int dimension2, bool random, std::vector<vari
     }
 }
 
-int variable::setData(float* arr)
-{
-
-        for (int x = 0; x < this->dim1*this->dim2;x++)
-        {
-           
-            this->data[x] = arr[x];
-        }
-    
+int variable::setData(float* arr) {
+    const size_t n = static_cast<size_t>(dim1) * static_cast<size_t>(dim2);
+    if (n) std::memcpy(data, arr, n * sizeof(float));
     return 1;
 }
 
@@ -43,16 +38,15 @@ variable variable::operator+( variable& other)  {
         throw std::invalid_argument("Dimensions must match for addition.");
     }
 
-    // Create a new variable to store the result with dim1 and dim2 dimensions
     std::vector<variable*> temp;
     temp.push_back(const_cast<variable*>(this));
     temp.push_back(const_cast<variable*>(&other));
     variable result(this->dim1, this->dim2, false, temp);
 
-    // Allocate memory for `result` data and gradient
-    result.data = (float*)malloc(dim1 * dim2 * sizeof(float));
-    result.gradientChild1 = (float*)malloc(dim1 * dim2 * sizeof(float));
-    result.gradientChild2 = (float*)malloc(dim1 * dim2 * sizeof(float));
+    const size_t n = static_cast<size_t>(dim1) * static_cast<size_t>(dim2) * sizeof(float);
+    free(result.gradientChild1);
+    result.gradientChild1 = (float*)malloc(n);
+    result.gradientChild2 = (float*)malloc(n);
     result.gradC11 = dim1;
     result.gradC12 = dim2;
     result.gradC21 = dim1;
