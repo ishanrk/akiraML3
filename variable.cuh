@@ -41,6 +41,9 @@ public:
 	int setData(float* arr);
 
 	variable matrixMulVec( variable& other) ;
+	variable matrixMul( variable& other) ;
+	variable rowSoftmax() const;
+	variable transpose() const;
 
 	void getChildren();
 

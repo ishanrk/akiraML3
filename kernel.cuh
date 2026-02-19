@@ -64,3 +64,12 @@ __global__ void rmspropUpdateKernel(float* params, float* gradients, float* v,
 void rmspropUpdate(float* params, float* gradients, float* v, 
                    float learning_rate, float decay_rate, 
                    float epsilon, int N);
+
+// Matrix-matrix multiplication: C = A * B, A is MxK, B is KxN (row-major)
+__global__ void matrixMatrixMulKernel(float* A, float* B, float* C, int M, int K, int N);
+void matrixMatrixMul(float* A, float* B, float* C, int M, int K, int N);
+
+// Row-wise softmax: for matrix (rows, cols), apply softmax to each row
+__global__ void rowSoftmaxKernel(float* input, float* output, int rows, int cols);
+void rowSoftmax(float* input, float* output, int rows, int cols);
+void rowSoftmaxGradient(const float* output, const float* grad_upstream, float* grad_input, int rows, int cols);

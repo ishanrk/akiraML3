@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "kernel.cuh"
 
 
@@ -752,4 +752,102 @@ void rmspropUpdate(float* params, float* gradients, float* v,
     cudaFree(d_params);
     cudaFree(d_gradients);
     cudaFree(d_v);
+}
+
+// Matrix-matrix multiplication: C = A * B (row-major), A MxK, B KxN
+__global__ void matrixMatrixMulKernel(float* A, float* B, float* C, int M, int K, int N) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row < M && col < N) {
+        float sum = 0.0f;
+        for (int k = 0; k < K; k++) {
+            sum += A[row * K + k] * B[k * N + col];
+        }
+        C[row * N + col] = sum;
+    }
+}
+
+void matrixMatrixMul(float* A, float* B, float* C, int M, int K, int N) {
+    float* d_A, * d_B, * d_C;
+    cudaMalloc((void**)&d_A, M * K * sizeof(float));
+    cudaMalloc((void**)&d_B, K * N * sizeof(float));
+    cudaMalloc((void**)&d_C, M * N * sizeof(float));
+    cudaMemcpy(d_A, A, M * K * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, B, K * N * sizeof(float), cudaMemcpyHostToDevice);
+    dim3 blockSize(16, 16);
+    dim3 gridSize((N + blockSize.x - 1) / blockSize.x, (M + blockSize.y - 1) / blockSize.y);
+    matrixMatrixMulKernel << <gridSize, blockSize >> > (d_A, d_B, d_C, M, K, N);
+    cudaDeviceSynchronize();
+    cudaMemcpy(C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+}
+
+// Row-wise softmax
+__global__ void rowSoftmaxKernel(float* input, float* output, int rows, int cols) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row >= rows) return;
+    float max_val = input[row * cols];
+    for (int c = 1; c < cols; c++) {
+        float v = input[row * cols + c];
+        if (v > max_val) max_val = v;
+    }
+    float sum = 0.0f;
+    for (int c = 0; c < cols; c++) {
+        float v = expf(input[row * cols + c] - max_val);
+        output[row * cols + c] = v;
+        sum += v;
+    }
+    for (int c = 0; c < cols; c++) {
+        output[row * cols + c] /= sum;
+    }
+}
+
+void rowSoftmax(float* input, float* output, int rows, int cols) {
+    float* d_in, * d_out;
+    cudaMalloc((void**)&d_in, rows * cols * sizeof(float));
+    cudaMalloc((void**)&d_out, rows * cols * sizeof(float));
+    cudaMemcpy(d_in, input, rows * cols * sizeof(float), cudaMemcpyHostToDevice);
+    int blockSize = 256;
+    int numBlocks = (rows + blockSize - 1) / blockSize;
+    rowSoftmaxKernel << <numBlocks, blockSize >> > (d_in, d_out, rows, cols);
+    cudaDeviceSynchronize();
+    cudaMemcpy(output, d_out, rows * cols * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaFree(d_in);
+    cudaFree(d_out);
+}
+
+__global__ void rowSoftmaxGradientKernel(const float* output, float* grad_input, const float* grad_output, int rows, int cols) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row >= rows) return;
+    for (int i = 0; i < cols; i++) {
+        float s = output[row * cols + i];
+        float g = 0.0f;
+        for (int j = 0; j < cols; j++) {
+            float sj = output[row * cols + j];
+            if (i == j)
+                g += grad_output[row * cols + j] * (s * (1.0f - s));
+            else
+                g += grad_output[row * cols + j] * (-s * sj);
+        }
+        grad_input[row * cols + i] = g;
+    }
+}
+
+void rowSoftmaxGradient(const float* output, const float* grad_upstream, float* grad_input, int rows, int cols) {
+    float* d_out, * d_grad_in, * d_grad_out;
+    cudaMalloc((void**)&d_out, rows * cols * sizeof(float));
+    cudaMalloc((void**)&d_grad_in, rows * cols * sizeof(float));
+    cudaMalloc((void**)&d_grad_out, rows * cols * sizeof(float));
+    cudaMemcpy(d_out, output, rows * cols * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_grad_out, grad_upstream, rows * cols * sizeof(float), cudaMemcpyHostToDevice);
+    int blockSize = 256;
+    int numBlocks = (rows + blockSize - 1) / blockSize;
+    rowSoftmaxGradientKernel << <numBlocks, blockSize >> > (d_out, d_grad_in, d_grad_out, rows, cols);
+    cudaDeviceSynchronize();
+    cudaMemcpy(grad_input, d_grad_in, rows * cols * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaFree(d_out);
+    cudaFree(d_grad_in);
+    cudaFree(d_grad_out);
 }

@@ -157,6 +157,53 @@ variable variable::matrixMulVec( variable& other)
     return result;
 }
 
+variable variable::matrixMul( variable& other)
+{
+    if (this->dim2 != other.dim1) {
+        throw std::invalid_argument("For matrixMul: this->dim2 must equal other.dim1 (A MxK * B KxN).");
+    }
+    int M = this->dim1, K = this->dim2, N = other.dim2;
+    std::vector<variable*> temp;
+    temp.push_back(const_cast<variable*>(this));
+    temp.push_back(const_cast<variable*>(&other));
+    variable result(M, N, false, temp);
+    result.data = (float*)malloc(M * N * sizeof(float));
+    result.gradientChild1 = (float*)malloc(N * K * sizeof(float));
+    result.gradientChild2 = (float*)malloc(K * M * sizeof(float));
+    matrixMatrixMul(this->data, other.data, result.data, M, K, N);
+    transposeMatrixCPU(other.data, result.gradientChild1, K, N);
+    result.gradC11 = N;
+    result.gradC12 = K;
+    transposeMatrixCPU(this->data, result.gradientChild2, M, K);
+    result.gradC21 = K;
+    result.gradC22 = M;
+    this->parents.push_back(result);
+    other.parents.push_back(result);
+    return result;
+}
+
+variable variable::rowSoftmax() const
+{
+    std::vector<variable*> temp;
+    temp.push_back(const_cast<variable*>(this));
+    variable result(this->dim1, this->dim2, false, temp);
+    result.data = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+    result.gradientChild1 = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+    rowSoftmax(this->data, result.data, this->dim1, this->dim2);
+    return result;
+}
+
+variable variable::transpose() const
+{
+    std::vector<variable*> temp;
+    temp.push_back(const_cast<variable*>(this));
+    variable result(this->dim2, this->dim1, false, temp);
+    result.data = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+    result.gradientChild1 = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+    transposeMatrixCPU(this->data, result.data, this->dim1, this->dim2);
+    return result;
+}
+
 
 void variable::tester()
 {
@@ -258,7 +305,36 @@ int variable::backward(variable * root, float* gradAccum, int childID)
     
         backwardGrad = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
    
-        if (!parents.empty() && (this->parents[0].dim1 == 1) && (this->parents[0].dim2 == 1))
+        if (!parents.empty() && parents[0].dim1 > 1 && parents[0].dim2 > 1 && parents[0].children.size() == 2) {
+            variable& par = parents[0];
+            if (childID == 0 && par.gradientChild1 != nullptr && par.dim1 == this->dim1 && par.gradC12 == this->dim2) {
+                matrixMatrixMul(gradAccum, par.gradientChild1, backwardGrad, par.dim1, par.dim2, par.gradC12);
+            } else if (childID == 1 && par.gradientChild2 != nullptr && par.dim2 == this->dim2 && par.gradC21 == this->dim1) {
+                matrixMatrixMul(par.gradientChild2, gradAccum, backwardGrad, par.gradC21, par.dim1, par.dim2);
+            }
+            for (int x = 0; x < children.size(); x++) {
+                if (children[x] != this) {
+                    children[x]->backward(root, backwardGrad, x);
+                }
+            }
+        }
+        else if (!parents.empty() && parents[0].children.size() == 1 && parents[0].dim1 == this->dim1 && parents[0].dim2 == this->dim2 && parents[0].dim1 > 1 && parents[0].dim2 > 1) {
+            rowSoftmaxGradient(parents[0].data, gradAccum, backwardGrad, this->dim1, this->dim2);
+            for (int x = 0; x < children.size(); x++) {
+                if (children[x] != this) {
+                    children[x]->backward(root, backwardGrad, x);
+                }
+            }
+        }
+        else if (!parents.empty() && parents[0].children.size() == 1 && parents[0].dim1 == this->dim2 && parents[0].dim2 == this->dim1) {
+            transposeMatrixCPU(gradAccum, backwardGrad, this->dim2, this->dim1);
+            for (int x = 0; x < children.size(); x++) {
+                if (children[x] != this) {
+                    children[x]->backward(root, backwardGrad, x);
+                }
+            }
+        }
+        else if (!parents.empty() && (this->parents[0].dim1 == 1) && (this->parents[0].dim2 == 1))
         {
             // this indicates dot product 
            
