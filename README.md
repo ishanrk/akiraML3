@@ -39,7 +39,7 @@ auto [X2, labels2] = loadBuiltinWine();
 normalizeFeaturesMinMax(X);
 ```
 
-## MNIST / Fashion-MNIST
+## MNIST / Fashion-MNIST Example
 
 1. **Download data (Python, one-time):**  
    `pip install torch torchvision`  
