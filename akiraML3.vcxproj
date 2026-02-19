@@ -82,12 +82,14 @@
     <CudaCompile Include="neural_network.cu" />
     <CudaCompile Include="test.cu" />
     <CudaCompile Include="tests.cu" />
+    <CudaCompile Include="transformers.cu" />
     <CudaCompile Include="variable.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="kernel.cuh" />
     <ClInclude Include="models.cuh" />
     <ClInclude Include="neural_network.cuh" />
+    <ClInclude Include="transformers.cuh" />
     <ClInclude Include="optimizers.cuh" />
     <ClInclude Include="tests.cuh" />
     <ClInclude Include="variable.cuh" />

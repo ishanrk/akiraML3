@@ -51,12 +51,12 @@ TransformerEncoderLayer::TransformerEncoderLayer(int seq_len_, int d_model_, int
     xavierInit2D(W_k[0].data, d_model, d_model);
     xavierInit2D(W_v[0].data, d_model, d_model);
     xavierInit2D(W_o[0].data, d_model, d_model);
-    W_ff1.push_back(variable(d_ff, d_model, false));
+    W_ff1.push_back(variable(d_model, d_ff, false));
     b_ff1.push_back(variable(seq_len, d_ff, false));
-    W_ff2.push_back(variable(d_model, d_ff, false));
+    W_ff2.push_back(variable(d_ff, d_model, false));
     b_ff2.push_back(variable(seq_len, d_model, false));
-    xavierInit2D(W_ff1[0].data, d_ff, d_model);
-    xavierInit2D(W_ff2[0].data, d_model, d_ff);
+    xavierInit2D(W_ff1[0].data, d_model, d_ff);
+    xavierInit2D(W_ff2[0].data, d_ff, d_model);
     for (int i = 0; i < seq_len * d_ff; i++) b_ff1[0].data[i] = 0.1f;
     for (int i = 0; i < seq_len * d_model; i++) b_ff2[0].data[i] = 0.1f;
     if (optimizer) {
@@ -72,7 +72,8 @@ TransformerEncoderLayer::TransformerEncoderLayer(int seq_len_, int d_model_, int
 }
 
 variable TransformerEncoderLayer::forward(const variable& x) {
-    variable x_var = x;
+    variable x_var(x.dim1, x.dim2, false);
+    x_var.setData(x.data);
     variable Q = x_var.matrixMul(W_q[0]);
     variable K = x_var.matrixMul(W_k[0]);
     variable V = x_var.matrixMul(W_v[0]);
@@ -83,8 +84,8 @@ variable TransformerEncoderLayer::forward(const variable& x) {
     variable ff1_bias = ff1_out + b_ff1[0];
     variable ff1_relu = ff1_bias.relu();
     variable ff2_out = ff1_relu.matrixMul(W_ff2[0]);
-    variable out = ff2_out + b_ff2[0];
-    return residual1 + out;
+    variable ff_out = ff2_out + b_ff2[0];
+    return residual1 + ff_out;
 }
 
 TransformerEncoder::TransformerEncoder(int max_len_, int d_model_, int num_heads, int d_ff, int num_layers,
@@ -102,7 +103,8 @@ TransformerEncoder::~TransformerEncoder() {
 }
 
 variable TransformerEncoder::forward(const variable& x) {
-    variable x_pe = x;
+    variable x_pe(x.dim1, x.dim2, false);
+    x_pe.setData(x.data);
     for (int i = 0; i < x.dim1 * x.dim2; i++) {
         x_pe.data[i] += positional_encoding[i];
     }

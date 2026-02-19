@@ -7,7 +7,8 @@ AkiraML is a CUDA-based C++ library designed for building and training machine l
 - **Neural Network Framework**: Complete multi-layer perceptron implementation supporting both regression and classification tasks with configurable architectures, batch processing, and one-hot encoding utilities.
 - **Advanced Optimizers**: Three CUDA-accelerated optimization algorithms (Adam, RMSprop, SGD) with adaptive learning rates, momentum, and second-order moment estimation for efficient parameter updates.
 - **CUDA-Accelerated Operations**: 15+ parallel GPU kernels for matrix-vector multiplication, element-wise operations, activation functions (ReLU, Sigmoid, Softmax), gradient computations, and matrix transposition.
-- **Tensor Operations**: Comprehensive variable class supporting addition, dot product, matrix multiplication, scaling, and seamless integration with computational graphs for automatic backpropagation.
+- **Tensor Operations**: Comprehensive variable class supporting addition, dot product, matrix-vector and matrix-matrix multiplication, scaling, transpose, row-wise softmax, and seamless integration with computational graphs for automatic backpropagation.
+- **Transformers**: Transformer encoder with scaled dot-product attention, sinusoidal positional encoding, multi-head self-attention (configurable heads), and feed-forward layers with residual connections; all differentiable and CUDA-backed.
 - **Comprehensive Testing**: 13+ test cases covering vector operations, activation functions, loss calculations, linear regression models, neural network training, and optimizer performance comparisons with synthetic data generation.
 
 ## Dependencies
@@ -17,8 +18,8 @@ AkiraML is a CUDA-based C++ library designed for building and training machine l
 ## Files and Structure
 - **`variable.h`**: Contains the `variable` class, defining the core data structure for storing and manipulating tensors.
 - **`kernel.cuh`**: Defines CUDA kernels and CUDA-based utility functions for matrix operations, activation functions, etc.
-- **`models.cuh`**: Contains basic machine learning models, such as a scalar linear regression example.
-- **`main.cpp`**: Demonstrates the usage of AkiraML with a simple scalar linear regression model.
+- **`models.cuh`** / **`models.cu`**: Basic machine learning models (e.g. scalar linear regression with SGD, Adam, RMSprop).
+- **`transformers.cuh`** / **`transformers.cu`**: Transformer encoder: scaled dot-product attention, positional encoding, `TransformerEncoderLayer`, and `TransformerEncoder`.
 
 ## Getting Started
 
@@ -95,7 +96,9 @@ Represents a tensor with dimensions (dim1, dim2) and supports operations like:
 
 - Addition: operator+
 - Matrix-Vector Multiplication: matrixMulVec
-- Activation Functions: relu, sigmoid, softmax
+- Matrix-Matrix Multiplication: matrixMul
+- Transpose: transpose
+- Activation Functions: relu, sigmoid, softmax, rowSoftmax (per-row softmax for attention)
 - Backpropagation: backward through constructed computational graph
 - RMSE Loss: RMSELOSS
 - Scaling: scale
@@ -190,6 +193,31 @@ int main() {
     std::cout << "Test input: [" << test_input[0] << ", " << test_input[1] << "]" << std::endl;
     std::cout << "Prediction: " << prediction[0] << std::endl;
     
+    return 0;
+}
+```
+
+### Transformer Encoder Example
+```cpp
+#include <iostream>
+#include "transformers.cuh"
+#include "optimizers.cuh"
+
+int main() {
+    int seq_len = 8;   // Sequence length
+    int d_model = 64;  // Model dimension
+    int num_heads = 4;
+    int d_ff = 256;    // Feed-forward hidden dimension
+    int num_layers = 2;
+
+    auto opt = std::make_shared<Adam>(0.0001f, 0.9f, 0.999f, 1e-8f);
+    TransformerEncoder encoder(seq_len, d_model, num_heads, d_ff, num_layers, opt);
+
+    variable input(seq_len, d_model, false);
+    // ... set input.data for your sequence embeddings ...
+
+    variable output = encoder.forward(input);
+    // output has shape (seq_len, d_model); use with a loss and backward() for training
     return 0;
 }
 ```

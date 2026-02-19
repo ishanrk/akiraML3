@@ -182,6 +182,8 @@ variable variable::matrixMul( variable& other)
     return result;
 }
 
+static const float ROWSOFTMAX_SENTINEL = -1e30f;
+
 variable variable::rowSoftmax() const
 {
     std::vector<variable*> temp;
@@ -189,7 +191,8 @@ variable variable::rowSoftmax() const
     variable result(this->dim1, this->dim2, false, temp);
     result.data = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
     result.gradientChild1 = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
-    rowSoftmax(this->data, result.data, this->dim1, this->dim2);
+    result.gradientChild1[0] = ROWSOFTMAX_SENTINEL;
+    ::rowSoftmax(this->data, result.data, this->dim1, this->dim2);
     return result;
 }
 
@@ -201,6 +204,21 @@ variable variable::transpose() const
     result.data = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
     result.gradientChild1 = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
     transposeMatrixCPU(this->data, result.data, this->dim1, this->dim2);
+    return result;
+}
+
+variable variable::scale(float scalar)
+{
+    std::vector<variable*> temp;
+    temp.push_back(const_cast<variable*>(this));
+    variable result(this->dim1, this->dim2, false, temp);
+    result.data = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+    result.gradientChild1 = (float*)malloc(this->dim1 * this->dim2 * sizeof(float));
+    for (int i = 0; i < this->dim1 * this->dim2; i++) {
+        result.data[i] = this->data[i] * scalar;
+        result.gradientChild1[i] = scalar;
+    }
+    this->parents.push_back(result);
     return result;
 }
 
@@ -318,7 +336,7 @@ int variable::backward(variable * root, float* gradAccum, int childID)
                 }
             }
         }
-        else if (!parents.empty() && parents[0].children.size() == 1 && parents[0].dim1 == this->dim1 && parents[0].dim2 == this->dim2 && parents[0].dim1 > 1 && parents[0].dim2 > 1) {
+        else if (!parents.empty() && parents[0].children.size() == 1 && parents[0].dim1 == this->dim1 && parents[0].dim2 == this->dim2 && parents[0].dim1 > 1 && parents[0].dim2 > 1 && parents[0].gradientChild1 != nullptr && parents[0].gradientChild1[0] == ROWSOFTMAX_SENTINEL) {
             rowSoftmaxGradient(parents[0].data, gradAccum, backwardGrad, this->dim1, this->dim2);
             for (int x = 0; x < children.size(); x++) {
                 if (children[x] != this) {
@@ -328,6 +346,14 @@ int variable::backward(variable * root, float* gradAccum, int childID)
         }
         else if (!parents.empty() && parents[0].children.size() == 1 && parents[0].dim1 == this->dim2 && parents[0].dim2 == this->dim1) {
             transposeMatrixCPU(gradAccum, backwardGrad, this->dim2, this->dim1);
+            for (int x = 0; x < children.size(); x++) {
+                if (children[x] != this) {
+                    children[x]->backward(root, backwardGrad, x);
+                }
+            }
+        }
+        else if (!parents.empty() && parents[0].children.size() == 1 && parents[0].dim1 == this->dim1 && parents[0].dim2 == this->dim2 && parents[0].gradientChild1 != nullptr && parents[0].gradientChild1[0] != ROWSOFTMAX_SENTINEL) {
+            elementwiseMultiply(gradAccum, parents[0].gradientChild1, backwardGrad, dim1 * dim2);
             for (int x = 0; x < children.size(); x++) {
                 if (children[x] != this) {
                     children[x]->backward(root, backwardGrad, x);
