@@ -517,9 +517,9 @@ Add a branch in variable::backward that detects this op (e.g. by dimensions or a
 
 The benchmark suite covers:
 
-- **Regression sweeps:** synthetic `reg_n{100,250,500,1000,2000,5000}` with 10 features and MLP `[10,16,8,1]`
-- **Classification sweeps:** synthetic `clf_n{200,500,1000,2000}` with 5 features, 3 classes and MLP `[5,8,3]`
-- **UCI datasets:** Iris (`[4,8,3]`) and Wine (`[13,16,3]`)
+1. **Regression examples:** synthetic `reg_n{100,250,500,1000,2000,5000}` with 10 features and MLP `[10,16,8,1]`
+2. **Classification examples:** synthetic `clf_n{200,500,1000,2000}` with 5 features, 3 classes and MLP `[5,8,3]`
+3. **UCI datasets:** Iris (`[4,8,3]`) and Wine (`[13,16,3]`)
 
 For each run it reports: **`train_sec`**, **`epoch_ms`**, **`samples_per_sec`**, **`final_loss`**, and (for classification) **`accuracy`**.  
 Use `scripts/plot_benchmarks.py` to generate comparison graphs for `akiraML3` and any other C++ autodiff engines that emit the same CSV format (see `benchmarks/README.md`).
