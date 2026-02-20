@@ -1,8 +1,14 @@
 # AkiraML
 
+
 CUDA C++ library for building and training ML models. Autodiff, variables, optimizers, MLP, transformer encoder.
 
 Dependencies: CUDA, C++ standard library.
+
+## What is Autodifferentiation
+<img width="326" height="188" alt="image" src="https://github.com/user-attachments/assets/3c2df279-7596-4c7e-b5ba-a7009445249e" />
+(Source: https://en.wikipedia.org/wiki/Automatic_differentiation#/media/File:ForwardAccumulationAutomaticDifferentiation.png)
+As the name implies, this is simply an automated program to calculate derivatives of compositions of functions (which neural networks essentially are). This is done by analyzing the computational graph (think about the connections of a neural network) to calculate gradients at each node. Most of your favourite ML libraries like PyTorch have an underlying autodiff library written in C++ for speed reasons (quicker memory access, gpu kernel tricks). When you call .backward() in PyTorch it is the equivalent of effectively evaluating the derivatives we calculate in the computational graph based on your loss function (each derivative is of the form dL/d weight)
 
 ## Files
 
